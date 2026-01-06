@@ -2,7 +2,7 @@
 
 This repository provides a **serverless-ready and local-capable deployment** of **ByteDance’s LatentSync 1.6** lip-sync model.
 It supports **explicit environment selection** for **local**, **staging**, and **production** deployments.
-
+This system was ran and tested on **Nvidia RTX 3090 and A40** and consumed **~19 GB video ram**
 ---
 
 ## 🚀 Key Features
