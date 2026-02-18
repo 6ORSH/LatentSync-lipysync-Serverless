@@ -5,17 +5,35 @@ import logging
 import shutil
 import torch
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 
 from utils.s3 import download_file, upload_file
-from utils.utllity import load_environment, classify_env
+from utils.utllity import load_environment, classify_env, get_audio_duration
 from utils.video import load_pipe, generate_lipsync
 from utils.caption_burn import burn_captions_with_audio_gpu
+from utils.randomizer import RandomizedVideoSampler
 
 logging.basicConfig(level=logging.INFO)
 
-_ = load_pipe()  # preload LatentSync
+# -------------------------
+# Global initialization
+# -------------------------
+
+_ = load_pipe()  # preload LatentSync (GPU)
 SEED = 1247
 
+video_randomizer = RandomizedVideoSampler(
+    resize_factor=1,
+    seed=None
+)
+
+# Thread pool for IO + CPU work
+io_pool = ThreadPoolExecutor(max_workers=3)
+
+
+# -------------------------
+# Handler
+# -------------------------
 
 def handler(event):
     workdir = None
@@ -39,14 +57,32 @@ def handler(event):
         workdir = Path("/tmp") / str(uuid.uuid4())
         workdir.mkdir(parents=True, exist_ok=True)
 
-        for meta_idx, meta in enumerate(inp_meta_list):
+        # =============================
+        # Loop over reference videos
+        # =============================
+        for meta in inp_meta_list:
             ref_video_path = meta["ref_video_path"]
             cc_enabled = meta.get("cc", False)
             audio_meta_list = meta["ref_audio_meta"]
 
             meta_outputs = []
 
-            for audio_idx, audio_meta in enumerate(audio_meta_list):
+            # ---- Download ref video ONCE ----
+            ref_dir = workdir / "ref"
+            ref_dir.mkdir(exist_ok=True)
+
+            local_ref_video = ref_dir / "ref.mp4"
+
+            if level == "local":
+                local_ref_video = Path(ref_video_path)
+            else:
+                logging.info("⬇️ Downloading reference video")
+                download_file(ref_video_path, str(local_ref_video))
+
+            # =============================
+            # Loop over audios
+            # =============================
+            for audio_meta in audio_meta_list:
                 audio_path = audio_meta["audio_path"]
                 srt_path = audio_meta.get("srt_path")
 
@@ -54,37 +90,49 @@ def handler(event):
                 job_dir = workdir / job_id
                 job_dir.mkdir(parents=True, exist_ok=True)
 
-                local_video = job_dir / "input.mp4"
                 local_audio = job_dir / "input.wav"
                 local_srt = job_dir / "subs.srt"
 
+                randomized_video = job_dir / "randomized_input.mp4"
                 lipsync_out = job_dir / "lipsync.mp4"
                 final_out = job_dir / "final.mp4"
                 temp_dir = job_dir / "temp"
 
-                # ---- Download inputs ----
+                # ---- Download audio / srt ----
                 if level == "local":
-                    local_video = Path(ref_video_path)
                     local_audio = Path(audio_path)
                     if srt_path:
                         local_srt = Path(srt_path)
                 else:
-                    download_file(ref_video_path, str(local_video))
                     download_file(audio_path, str(local_audio))
                     if srt_path:
                         download_file(srt_path, str(local_srt))
 
-                # ---- Lip-sync ----
+                # ---- Randomize video (ASYNC, CPU) ----
+                logging.info("🎲 Randomizing reference video")
+                duration = get_audio_duration(local_audio) or 5
+
+                randomize_future = io_pool.submit(
+                    video_randomizer.generate_randomized_video,
+                    input_video=str(local_ref_video),
+                    output_video=str(randomized_video),
+                    duration_seconds=duration
+                )
+
+                # ---- Wait before GPU ----
+                randomize_future.result()
+
+                # ---- Lip-sync (GPU, SEQUENTIAL) ----
                 logging.info("🎬 Generating lip-sync")
                 generate_lipsync(
-                    video_path=str(local_video),
+                    video_path=str(randomized_video),
                     audio_path=str(local_audio),
                     output_path=str(lipsync_out),
                     temp_dir=str(temp_dir),
                     seed=SEED,
                 )
 
-                # ---- Caption burn (optional) ----
+                # ---- Caption burn (GPU, optional) ----
                 if cc_enabled and srt_path:
                     logging.info("📝 Burning captions")
                     burn_captions_with_audio_gpu(
@@ -96,12 +144,17 @@ def handler(event):
                 else:
                     upload_target = lipsync_out
 
-                # ---- Upload ----
+                # ---- Upload (ASYNC) ----
                 if level == "local":
                     s3_output = str(upload_target)
                 else:
                     s3_key = f"video_gen/latentsync/{job_id}.mp4"
-                    s3_output = upload_file(str(upload_target), s3_key)
+                    upload_future = io_pool.submit(
+                        upload_file,
+                        str(upload_target),
+                        s3_key
+                    )
+                    s3_output = upload_future.result()
 
                 meta_outputs.append({
                     "audio_path": audio_path,
@@ -130,5 +183,9 @@ def handler(event):
             shutil.rmtree(workdir, ignore_errors=True)
         torch.cuda.empty_cache()
 
+
+# -------------------------
+# RunPod entry
+# -------------------------
 
 runpod.serverless.start({"handler": handler})

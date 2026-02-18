@@ -1,26 +1,9 @@
 import os
 import cv2
+import subprocess
+import json
+
 from dotenv import load_dotenv, find_dotenv
-
-# ============================
-# Runtime globals (per request)
-# ============================
-# RUNTIME_ENV = None
-# AWS_ACCESS_KEY_ID = None
-# AWS_SECRET_ACCESS_KEY = None
-# AWS_REGION = None
-# S3_BUCKET = None
-#
-
-# def reset_runtime_env():
-#     global RUNTIME_ENV
-#     global AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION, S3_BUCKET
-#
-#     RUNTIME_ENV = None
-#     AWS_ACCESS_KEY_ID = None
-#     AWS_SECRET_ACCESS_KEY = None
-#     AWS_REGION = None
-#     S3_BUCKET = None
 
 
 def load_environment(env_key: str = "stag"):
@@ -60,3 +43,24 @@ def classify_env(value: str, default: str = "stag") -> str:
     return default
 
 
+def get_audio_duration(audio_path, padding_seconds=1.0):
+    """
+    Returns audio duration in seconds + padding
+    """
+    cmd = [
+        "ffprobe",
+        "-v", "error",
+        "-show_entries", "format=duration",
+        "-of", "json",
+        audio_path
+    ]
+
+    result = subprocess.run(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True
+    )
+
+    duration = float(json.loads(result.stdout)["format"]["duration"])
+    return duration + padding_seconds

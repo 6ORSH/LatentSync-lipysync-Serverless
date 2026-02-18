@@ -13,6 +13,7 @@ This system was ran and tested on **Nvidia RTX 3090 and A40** and consumed **~19
 * Preloaded models (UNet, Whisper, VAE, InsightFace)
 * No runtime model downloads
 * Global pipeline reuse
+* A specialized Randomizer Algorithm such that every next video is a new video.
 * Clean runtime cleanup & GPU memory handling
 
 ---
