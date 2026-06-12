@@ -120,6 +120,87 @@ All models are **preloaded at build time**, ensuring fully offline runtime execu
 
 ---
 
+## ☁️ Deploy on RunPod Serverless (Network Volume)
+
+This fork ships a **lightweight image**: model checkpoints are **not** baked in
+(the download block in the `Dockerfile` is commented out). Instead they live on a
+**RunPod Network Volume** and are mounted at runtime. On serverless the volume is
+mounted at `/runpod-volume`; `app.py` symlinks `/app/checkpoints → /runpod-volume/checkpoints`
+on startup so both `utils/video.py` and InsightFace's `FaceDetector`
+(`root="checkpoints/auxiliary"`) resolve correctly. VAE is the only weight baked
+into the image (via `pre_model.py`).
+
+### 1. Create the Network Volume
+
+RunPod → **Storage → Network Volumes** → create a ~20 GB volume **in the same
+region** as the serverless endpoint.
+
+### 2. Populate the volume
+
+Attach the volume to a temporary Pod (mounts at `/workspace`) and run:
+
+```bash
+pip install -U "huggingface-hub[cli]"
+
+# UNet
+huggingface-cli download ByteDance/LatentSync-1.6 latentsync_unet.pt \
+  --local-dir /workspace/checkpoints --local-dir-use-symlinks False
+
+# Whisper tiny  (config stage2_512.yaml: cross_attention_dim=384)
+huggingface-cli download ByteDance/LatentSync-1.6 whisper/tiny.pt \
+  --local-dir /workspace/checkpoints/whisper --local-dir-use-symlinks False
+
+# InsightFace buffalo_l (used by FaceDetector)
+apt-get update && apt-get install -y wget unzip
+mkdir -p /workspace/checkpoints/auxiliary/models/buffalo_l
+wget -O /tmp/buffalo_l.zip \
+  https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip
+unzip /tmp/buffalo_l.zip -d /workspace/checkpoints/auxiliary/models/buffalo_l
+rm /tmp/buffalo_l.zip
+```
+
+Required layout on the volume (paths must match exactly):
+
+```
+checkpoints/
+├── latentsync_unet.pt
+├── whisper/whisper/tiny.pt            # double "whisper" is intentional
+└── auxiliary/models/buffalo_l/*.onnx  # det_10g.onnx, 2d106det.onnx, ...
+```
+
+Delete the temporary Pod afterward — the volume persists. VAE does **not** go on
+the volume (it is baked into the image).
+
+### 3. Build & push the image
+
+```bash
+docker build -t <registry>/latentsync-custom:v1 .
+docker push <registry>/latentsync-custom:v1
+```
+
+### 4. Create the endpoint
+
+* **Docker Image** = `<registry>/latentsync-custom:v1`
+* **Attach Network Volume** = the volume above (mounts at `/runpod-volume`)
+* **Env** = AWS credentials for S3 (required for `stag` / `prod`). `CHECKPOINTS_DIR`
+  is *not* needed — the startup symlink handles paths.
+* **GPU** ≥ 24 GB (A40 / A5000 / 4090)
+
+### 5. Verify cold start
+
+The logs should show, with no `FileNotFoundError` / `Face not detected`:
+
+```
+🔗 Linked /app/checkpoints -> /runpod-volume/checkpoints
+Loading LatentSync pipeline...
+```
+
+> **Alternative (bake into image):** uncomment the checkpoint-download block in the
+> `Dockerfile` instead of using a volume. Produces a self-contained but ~5 GB larger
+> image; no volume needed.
+
+---
+
 ## 🛠 Tech Stack
 
 * Python 3.10

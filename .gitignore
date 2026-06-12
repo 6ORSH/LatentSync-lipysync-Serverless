@@ -1,0 +1,64 @@
+# ---- Model checkpoints / weights (live on the Network Volume, never commit) ----
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+.installed.cfg
+*.egg
+
+# ---- Virtual environments ----
+.venv/
+venv/
+env/
+ENV/
+.conda/
+
+# ---- Env / secrets ----
+.env
+.env.*
+!.env.example
+*.pem
+
+# ---- Caches ----
+.cache/
+.huggingface/
+huggingface/
+.insightface/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- Runtime artifacts / media outputs ----
+/tmp/
+temp/
+outputs/
+*.log
+*.mp4
+*.wav
+*.avi
+*.mov
+*.srt
+!test_input.json
+
+# ---- Jupyter ----
+.ipynb_checkpoints/
+
+# ---- OS / editor ----
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

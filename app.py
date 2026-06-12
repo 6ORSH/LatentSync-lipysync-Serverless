@@ -16,6 +16,24 @@ from utils.randomizer import RandomizedVideoSampler
 logging.basicConfig(level=logging.INFO)
 
 # -------------------------
+# Checkpoints on RunPod Network Volume
+# -------------------------
+# In serverless the Network Volume is mounted at /runpod-volume, but both
+# utils/video.py and insightface's FaceDetector (root="checkpoints/auxiliary")
+# expect the weights under /app/checkpoints. Link them if the volume is present
+# so nothing has to change in the rest of the code. No-op for local runs or
+# when checkpoints are baked into the image.
+def _link_checkpoints():
+    volume_ckpt = Path("/runpod-volume/checkpoints")
+    local_ckpt = Path("/app/checkpoints")
+    if volume_ckpt.exists() and not local_ckpt.exists():
+        local_ckpt.symlink_to(volume_ckpt, target_is_directory=True)
+        logging.info(f"🔗 Linked {local_ckpt} -> {volume_ckpt}")
+
+
+_link_checkpoints()
+
+# -------------------------
 # Global initialization
 # -------------------------
 
