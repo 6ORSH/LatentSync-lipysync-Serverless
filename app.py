@@ -1,6 +1,7 @@
 import runpod
 import uuid
 import os
+import base64
 import logging
 import shutil
 import torch
@@ -64,7 +65,9 @@ def handler(event):
         results = []
 
         # ---- Environment selection ----
-        if level != "local":
+        # "test" = infra-free smoke test: inputs are public http(s) URLs,
+        # output is returned inline as base64 (no AWS / S3 needed).
+        if level not in ("local", "test"):
             ref_video_path = inp_meta_list[0]["ref_video_path"]
             if not level and ref_video_path:
                 parts = ref_video_path.split("/")
@@ -162,9 +165,15 @@ def handler(event):
                 else:
                     upload_target = lipsync_out
 
-                # ---- Upload (ASYNC) ----
+                # ---- Deliver result ----
+                output_encoding = None
                 if level == "local":
                     s3_output = str(upload_target)
+                elif level == "test":
+                    # Return the rendered video inline as base64 (no S3).
+                    with open(upload_target, "rb") as f:
+                        s3_output = base64.b64encode(f.read()).decode("utf-8")
+                    output_encoding = "base64"
                 else:
                     s3_key = f"video_gen/latentsync/{job_id}.mp4"
                     upload_future = io_pool.submit(
@@ -178,6 +187,7 @@ def handler(event):
                     "audio_path": audio_path,
                     "srt_path": srt_path,
                     "output_video": s3_output,
+                    "output_encoding": output_encoding,
                     "cc_applied": cc_enabled and bool(srt_path),
                 })
 
