@@ -41,37 +41,25 @@ RUN pip install tensorflow-cpu
 
 # Copy application code
 COPY . .
-#
-## clone latentsync
-#RUN git clone https://github.com/bytedance/LatentSync.git
-#
-#RUN apt-get update && apt-get install -y wget unzip
-#
-#RUN mkdir -p checkpoints/auxiliary/models/buffalo_l && \
-#    wget -O checkpoints/auxiliary/models/buffalo_l.zip \
-#      https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
-#    unzip checkpoints/auxiliary/models/buffalo_l.zip -d checkpoints/auxiliary/models/buffalo_l && \
-#    rm checkpoints/auxiliary/models/buffalo_l.zip
-#
-#
-#WORKDIR /app/LatentSync
-#
-## Pre-download checkpoints
-#RUN mkdir -p /app/LatentSync/checkpoints/whisper
-#
-#RUN huggingface-cli download ByteDance/LatentSync-1.6 \
-#    latentsync_unet.pt \
-#    --local-dir /app/checkpoints \
-#    --local-dir-use-symlinks False
-#
-#RUN huggingface-cli download ByteDance/LatentSync-1.6 \
-#    whisper/tiny.pt \
-#    --local-dir /app/checkpoints/whisper \
-#    --local-dir-use-symlinks False
-#
-## Pre-download VAE
-#WORKDIR /app
 
+# ---- Bake model checkpoints into the image (no Network Volume needed) ----
+# Paths must match utils/video.py and insightface FaceDetector(root="checkpoints/auxiliary").
+RUN apt-get update && apt-get install -y wget unzip && rm -rf /var/lib/apt/lists/*
+
+# UNet (~4.8 GB) -> /app/checkpoints/latentsync_unet.pt
+RUN hf download ByteDance/LatentSync-1.6 latentsync_unet.pt --local-dir /app/checkpoints
+
+# Whisper tiny -> /app/checkpoints/whisper/whisper/tiny.pt
+RUN hf download ByteDance/LatentSync-1.6 whisper/tiny.pt --local-dir /app/checkpoints/whisper
+
+# InsightFace buffalo_l -> /app/checkpoints/auxiliary/models/buffalo_l/*.onnx
+RUN mkdir -p /app/checkpoints/auxiliary/models/buffalo_l && \
+    wget -O /tmp/buffalo_l.zip \
+      https://github.com/deepinsight/insightface/releases/download/v0.7/buffalo_l.zip && \
+    unzip /tmp/buffalo_l.zip -d /app/checkpoints/auxiliary/models/buffalo_l && \
+    rm /tmp/buffalo_l.zip
+
+# Pre-download VAE into the HF cache
 RUN python3 pre_model.py
 
 ENV PYTHONPATH="/app/LatentSync:${PYTHONPATH}"
