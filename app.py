@@ -24,6 +24,7 @@ logging.basicConfig(level=logging.INFO)
 # expect the weights under /app/checkpoints. Link them if the volume is present
 # so nothing has to change in the rest of the code. No-op for local runs or
 # when checkpoints are baked into the image.
+
 def _link_checkpoints():
     volume_ckpt = Path("/runpod-volume/checkpoints")
     local_ckpt = Path("/app/checkpoints")
