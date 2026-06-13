@@ -1,0 +1,26 @@
+# Git
+.git
+.gitignore
+.dockerignore
+
+# Python caches
+**/__pycache__
+**/*.pyc
+**/*.pyo
+.venv
+venv
+env
+
+# Local checkpoints (baked at build time instead)
+checkpoints/
+
+# Editor / OS
+.idea
+.vscode
+.DS_Store
+Thumbs.db
+
+# Docs (not needed at runtime)
+*.md
+LatentSync/docs
+LatentSync/eval

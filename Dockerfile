@@ -39,10 +39,8 @@ RUN pip install -r requirements.txt
 RUN pip install huggingface-hub
 RUN pip install tensorflow-cpu
 
-# Copy application code
-COPY . .
-
 # ---- Bake model checkpoints into the image (no Network Volume needed) ----
+# Done BEFORE copying app code so these ~5 GB layers stay cached across code edits.
 # Paths must match utils/video.py and insightface FaceDetector(root="checkpoints/auxiliary").
 RUN apt-get update && apt-get install -y wget unzip && rm -rf /var/lib/apt/lists/*
 
@@ -59,8 +57,11 @@ RUN mkdir -p /app/checkpoints/auxiliary/models/buffalo_l && \
     unzip /tmp/buffalo_l.zip -d /app/checkpoints/auxiliary/models/buffalo_l && \
     rm /tmp/buffalo_l.zip
 
-# Pre-download VAE into the HF cache
-RUN python3 pre_model.py
+# VAE -> HF cache (loaded at runtime by utils/video.py)
+RUN python3 -c "from diffusers import AutoencoderKL; AutoencoderKL.from_pretrained('stabilityai/sd-vae-ft-mse')"
+
+# Copy application code LAST so edits don't invalidate the heavy layers above
+COPY . .
 
 ENV PYTHONPATH="/app/LatentSync:${PYTHONPATH}"
 
