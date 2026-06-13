@@ -47,10 +47,10 @@ COPY . .
 RUN apt-get update && apt-get install -y wget unzip && rm -rf /var/lib/apt/lists/*
 
 # UNet (~4.8 GB) -> /app/checkpoints/latentsync_unet.pt
-RUN hf download ByteDance/LatentSync-1.6 latentsync_unet.pt --local-dir /app/checkpoints
+RUN python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('ByteDance/LatentSync-1.6', 'latentsync_unet.pt', local_dir='/app/checkpoints')"
 
 # Whisper tiny -> /app/checkpoints/whisper/whisper/tiny.pt
-RUN hf download ByteDance/LatentSync-1.6 whisper/tiny.pt --local-dir /app/checkpoints/whisper
+RUN python3 -c "from huggingface_hub import hf_hub_download; hf_hub_download('ByteDance/LatentSync-1.6', 'whisper/tiny.pt', local_dir='/app/checkpoints/whisper')"
 
 # InsightFace buffalo_l -> /app/checkpoints/auxiliary/models/buffalo_l/*.onnx
 RUN mkdir -p /app/checkpoints/auxiliary/models/buffalo_l && \
