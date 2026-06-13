@@ -18,10 +18,15 @@ def get_s3_client():
 def download_file(s3_uri, local_path):
     if s3_uri.startswith("http"):
         import requests
-        r = requests.get(s3_uri, timeout=30)
-        r.raise_for_status()
-        with open(local_path, "wb") as f:
-            f.write(r.content)
+        # Browser UA: hosts like catbox/Cloudflare drop bare python-requests
+        # connections. Stream to disk to handle large files.
+        headers = {"User-Agent": "Mozilla/5.0"}
+        with requests.get(s3_uri, timeout=60, headers=headers, stream=True) as r:
+            r.raise_for_status()
+            with open(local_path, "wb") as f:
+                for chunk in r.iter_content(chunk_size=1 << 20):
+                    if chunk:
+                        f.write(chunk)
         return
 
     # s3://bucket/key
