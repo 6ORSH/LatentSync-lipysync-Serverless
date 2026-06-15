@@ -388,6 +388,15 @@ class LipsyncPipeline(DiffusionPipeline):
 
         video_frames, faces, boxes, affine_matrices, skipped_indices = self.loop_video(whisper_chunks, video_frames)
 
+        # Face detection skips frames where no face is found, so `faces` can be
+        # shorter than `whisper_chunks`. all_latents/audio are sized from
+        # whisper_chunks, faces/masks from detected faces — a mismatch makes the
+        # final (partial) inference window ragged and torch.cat in the denoising
+        # loop fails ("Sizes of tensors must match..."). Align audio to the
+        # available faces.
+        if len(faces) < len(whisper_chunks):
+            whisper_chunks = whisper_chunks[: len(faces)]
+
         synced_video_frames = []
 
         num_channels_latents = self.vae.config.latent_channels
