@@ -84,11 +84,24 @@ class RandomizedVideoSampler:
     # -------------------------
     def randomized_frame_generator(self, frames, num_frames):
         """
-        Generator yielding randomized frames using
-        forward/backward traversal
+        Generator yielding randomized frames.
+
+        If the source has enough frames, yield a single contiguous forward
+        segment from a random start (variety without the visible back-and-forth
+        wobble). Only fall back to forward/backward traversal when the source is
+        shorter than needed, to smoothly fill the extra frames without a hard cut.
         """
+        n = len(frames)
+
+        if n >= num_frames:
+            start = np.random.randint(0, n - num_frames + 1)
+            for idx in range(start, start + num_frames):
+                yield frames[idx]
+            return
+
+        # Source shorter than needed: forward/backward traversal to fill length.
         reverse = False
-        reverse_point = np.random.randint(1, len(frames))
+        reverse_point = np.random.randint(1, n)
         idx = np.random.randint(0, reverse_point)
 
         for _ in range(num_frames):
@@ -98,10 +111,10 @@ class RandomizedVideoSampler:
                 if reverse:
                     reverse_point = np.random.randint(0, idx)
                 else:
-                    reverse_point = np.random.randint(idx, len(frames))
+                    reverse_point = np.random.randint(idx, n)
 
             idx = idx - 1 if reverse else idx + 1
-            idx = np.clip(idx, 0, len(frames) - 1)
+            idx = np.clip(idx, 0, n - 1)
 
             yield frames[idx]
 
