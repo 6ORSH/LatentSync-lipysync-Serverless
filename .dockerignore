@@ -14,6 +14,16 @@ env
 # Local checkpoints (baked at build time instead)
 checkpoints/
 
+# Env files with secrets — injected at runtime by RunPod, never bake into the image
+.env
+.env.*
+*.env
+
+# Local media / artifacts
+*.mp4
+*.wav
+response.json
+
 # Editor / OS
 .idea
 .vscode
