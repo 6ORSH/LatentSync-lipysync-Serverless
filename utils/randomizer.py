@@ -84,39 +84,18 @@ class RandomizedVideoSampler:
     # -------------------------
     def randomized_frame_generator(self, frames, num_frames):
         """
-        Generator yielding randomized frames.
+        Yield frames forward from a random start, wrapping around with modulo
+        when more frames are needed than the source has.
 
-        If the source has enough frames, yield a single contiguous forward
-        segment from a random start (variety without the visible back-and-forth
-        wobble). Only fall back to forward/backward traversal when the source is
-        shorter than needed, to smoothly fill the extra frames without a hard cut.
+        Forward-only: no back-and-forth, so no visible wobble. The random start
+        keeps each generated clip different. When the source is shorter than the
+        requested length there is at most one seam per wrap-around (a single
+        frame jump), which is far less noticeable than oscillating playback.
         """
         n = len(frames)
-
-        if n >= num_frames:
-            start = np.random.randint(0, n - num_frames + 1)
-            for idx in range(start, start + num_frames):
-                yield frames[idx]
-            return
-
-        # Source shorter than needed: forward/backward traversal to fill length.
-        reverse = False
-        reverse_point = np.random.randint(1, n)
-        idx = np.random.randint(0, reverse_point)
-
-        for _ in range(num_frames):
-
-            if idx == reverse_point:
-                reverse = not reverse
-                if reverse:
-                    reverse_point = np.random.randint(0, idx)
-                else:
-                    reverse_point = np.random.randint(idx, n)
-
-            idx = idx - 1 if reverse else idx + 1
-            idx = np.clip(idx, 0, n - 1)
-
-            yield frames[idx]
+        start = np.random.randint(0, n)
+        for k in range(num_frames):
+            yield frames[(start + k) % n]
 
     # -------------------------
     # High-level API
