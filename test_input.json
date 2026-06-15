@@ -1,19 +1,15 @@
 {
   "input": {
+    "user_id": "anon",
     "inp_meta": [
       {
-        "ref_video_path": "s3://your-bucket-name/video_gen/wan/actor_5.mp4",
+        "ref_video_path": "inputs/anon/demo/ref.mp4",
         "ref_audio_meta": [
           {
-            "audio_path": "s3://your-bucket-name/video_gen/tts/d320cc63-dadf-419b-9110-9e261dfddd44.wav",
-            "srt_path": "s3://your-bucket-name/video_gen/srt/0866cb2a-014b-4f02-80bd-b919f8743b6b.srt"
-          },
-          {
-            "audio_path": "s3://your-bucket-name/video_gen/tts/9f3db90c-f5e3-4690-a98c-72a198a49739.wav",
-            "srt_path": "s3://your-bucket-name/video_gen/srt/0be085e2-ee4f-46d1-8670-f69c4dad0b83.srt"
+            "audio_path": "inputs/anon/demo/audio_1.wav"
           }
         ],
-        "cc": true
+        "cc": false
       }
     ],
     "level": "stag"

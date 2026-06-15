@@ -8,8 +8,8 @@ import torch
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
-from utils.s3 import download_file, upload_file
-from utils.utllity import load_environment, classify_env, get_audio_duration
+from utils.s3 import download_key, download_url, upload_key, presigned_get
+from utils.utllity import load_environment, get_audio_duration
 from utils.video import load_pipe, generate_lipsync
 from utils.caption_burn import burn_captions_with_audio_gpu
 from utils.randomizer import RandomizedVideoSampler
@@ -62,17 +62,17 @@ def handler(event):
         payload = event["input"]
         inp_meta_list = payload["inp_meta"]
         level = payload.get("level")
+        user_id = payload.get("user_id", "anon")
 
         results = []
 
         # ---- Environment selection ----
-        # "test" = infra-free smoke test: inputs are public http(s) URLs,
-        # output is returned inline as base64 (no AWS / S3 needed).
+        # "test"  = infra-free smoke test: inputs are public http(s) URLs,
+        #           output is returned inline as base64 (no R2 needed).
+        # "local" = local file paths, no upload.
+        # else    = R2: inputs are object keys, results uploaded to R2.
         if level not in ("local", "test"):
-            ref_video_path = inp_meta_list[0]["ref_video_path"]
-            if not level and ref_video_path:
-                parts = ref_video_path.split("/")
-                level = classify_env(parts[2]) if len(parts) > 2 else None
+            level = level or "stag"
             load_environment(level)
 
         # ---- Working directory ----
@@ -97,9 +97,12 @@ def handler(event):
 
             if level == "local":
                 local_ref_video = Path(ref_video_path)
+            elif level == "test":
+                logging.info("⬇️ Downloading reference video (test URL)")
+                download_url(ref_video_path, str(local_ref_video))
             else:
-                logging.info("⬇️ Downloading reference video")
-                download_file(ref_video_path, str(local_ref_video))
+                logging.info("⬇️ Downloading reference video (R2)")
+                download_key(ref_video_path, str(local_ref_video))
 
             # =============================
             # Loop over audios
@@ -125,10 +128,14 @@ def handler(event):
                     local_audio = Path(audio_path)
                     if srt_path:
                         local_srt = Path(srt_path)
-                else:
-                    download_file(audio_path, str(local_audio))
+                elif level == "test":
+                    download_url(audio_path, str(local_audio))
                     if srt_path:
-                        download_file(srt_path, str(local_srt))
+                        download_url(srt_path, str(local_srt))
+                else:
+                    download_key(audio_path, str(local_audio))
+                    if srt_path:
+                        download_key(srt_path, str(local_srt))
 
                 # ---- Randomize video (ASYNC, CPU) ----
                 logging.info("🎲 Randomizing reference video")
@@ -168,26 +175,29 @@ def handler(event):
 
                 # ---- Deliver result ----
                 output_encoding = None
+                output_url = None
                 if level == "local":
-                    s3_output = str(upload_target)
+                    output_video = str(upload_target)
                 elif level == "test":
-                    # Return the rendered video inline as base64 (no S3).
+                    # Return the rendered video inline as base64 (no R2).
                     with open(upload_target, "rb") as f:
-                        s3_output = base64.b64encode(f.read()).decode("utf-8")
+                        output_video = base64.b64encode(f.read()).decode("utf-8")
                     output_encoding = "base64"
                 else:
-                    s3_key = f"video_gen/latentsync/{job_id}.mp4"
+                    out_key = f"outputs/{user_id}/{job_id}/result.mp4"
                     upload_future = io_pool.submit(
-                        upload_file,
+                        upload_key,
                         str(upload_target),
-                        s3_key
+                        out_key
                     )
-                    s3_output = upload_future.result()
+                    output_video = upload_future.result()
+                    output_url = presigned_get(out_key)
 
                 meta_outputs.append({
                     "audio_path": audio_path,
                     "srt_path": srt_path,
-                    "output_video": s3_output,
+                    "output_video": output_video,   # R2 key (or base64 / local path)
+                    "output_url": output_url,        # presigned GET (None for test/local)
                     "output_encoding": output_encoding,
                     "cc_applied": cc_enabled and bool(srt_path),
                 })

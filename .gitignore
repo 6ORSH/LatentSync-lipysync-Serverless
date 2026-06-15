@@ -29,7 +29,9 @@ ENV/
 # ---- Env / secrets ----
 .env
 .env.*
+*.env
 !.env.example
+!*.env.example
 *.pem
 
 # ---- Caches ----

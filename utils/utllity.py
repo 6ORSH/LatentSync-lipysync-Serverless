@@ -17,30 +17,14 @@ def load_environment(env_key: str = "stag"):
     else:
         print("🟡 Using injected RunPod env vars")
 
+    # R2 credentials are account-wide; only the bucket is environment-specific.
     if env_key == "stag":
-        os.environ["AWS_ACCESS_KEY_ID"] = os.environ["STAG_AWS_ACCESS_KEY_ID"]
-        os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ["STAG_AWS_SECRET_ACCESS_KEY"]
-        os.environ["LAMBDA_BUCKET"] = os.environ["LAMBDA_BUCKET"]
+        os.environ["R2_BUCKET"] = os.environ["STAG_R2_BUCKET"]
     else:
-        os.environ["AWS_ACCESS_KEY_ID"] = os.environ["PROD_AWS_ACCESS_KEY_ID"]
-        os.environ["AWS_SECRET_ACCESS_KEY"] = os.environ["PROD_AWS_SECRET_ACCESS_KEY"]
-        os.environ["LAMBDA_BUCKET"] = os.environ["LAMBDA_BUCKET"]
-
-    os.environ.setdefault("AWS_REGION", "us-east-2")
+        os.environ["R2_BUCKET"] = os.environ["PROD_R2_BUCKET"]
 
     print(f"✅ Runtime environment configured: {env_key}")
     return env_key
-
-def classify_env(value: str, default: str = "stag") -> str:
-    if not value:
-        return default
-
-    val = value.lower()
-    if "prod" in val or "production" in val:
-        return "prod"
-    if "stag" in val or "staging" in val:
-        return "stag"
-    return default
 
 
 def get_audio_duration(audio_path, padding_seconds=1.0):
