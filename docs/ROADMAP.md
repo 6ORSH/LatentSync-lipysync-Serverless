@@ -41,11 +41,14 @@ Code side (done in repo):
 - [x] `.gitignore` hardened (`*.env`), `stag.env.example` / `prod.env.example` templates
 
 Cloudflare side (user, in dashboard) — needed before this can run:
-- [ ] Create R2 buckets `latentsync-prod` and `latentsync-stag`
-- [ ] Create R2 API token (Access Key / Secret); note Account ID
-- [ ] Set RunPod endpoint env: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `STAG_R2_BUCKET`, `PROD_R2_BUCKET`
-- [ ] Lifecycle rules: `inputs/` expire 1–3 days, `outputs/` expire 30 days
-- [ ] End-to-end test: upload input keys → run worker (`level: stag`) → result in R2 + presigned URL works
+- [x] Create R2 buckets `latentsync-prod` and `latentsync-stag`
+- [x] Create R2 API token (Account API token, Object Read & Write); note Account ID
+- [x] Set RunPod endpoint env: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `STAG_R2_BUCKET`, `PROD_R2_BUCKET`
+- [ ] Lifecycle rules: `inputs/` expire 1–3 days, `outputs/` expire 30 days  ← still TODO
+- [x] End-to-end test: stag run COMPLETED 2026-06-15 (image v7), result in R2 + presigned URL
+
+Pipeline fix shipped alongside (v7): trim whisper_chunks to len(faces) so a
+partial last inference window doesn't crash when face detection skips frames.
 
 ## Phase 2 — Backend API (the brain)
 - [ ] FastAPI service skeleton + deploy target (Fly.io / Railway / VPS)
