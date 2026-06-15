@@ -45,6 +45,7 @@ huggingface/
 /tmp/
 temp/
 outputs/
+response.json
 *.log
 *.mp4
 *.wav

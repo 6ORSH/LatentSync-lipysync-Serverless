@@ -1,3 +1,9 @@
+# ⚠️ DEPRECATED — NOT the production entrypoint.
+# The live RunPod handler is app.py at the repo root (S3 I/O, randomizer,
+# captions, stag/prod routing). This file is an older standalone version
+# (video_url/audio_url -> base64, no S3) kept only for reference.
+# Do not wire this into the RunPod config. Safe to delete once unused.
+
 import os
 import base64
 import tempfile
