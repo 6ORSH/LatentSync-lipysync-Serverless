@@ -3,14 +3,13 @@ main = "src/index.ts"
 compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 
-# Non-secret config. Secrets (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
-# RUNPOD_API_KEY, JWT_SECRET, WEBHOOK_SECRET) come from .dev.vars locally
-# and `wrangler secret put` in production.
+# Only genuinely-public, stable config lives here. Everything account-specific or
+# secret (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, RUNPOD_API_KEY,
+# RUNPOD_ENDPOINT_ID, PUBLIC_BASE_URL, JWT_SECRET, WEBHOOK_SECRET) comes from
+# `wrangler secret put` in prod and .dev.vars locally. Do NOT add them here as
+# empty vars — a plain var overrides a same-named secret on deploy and wipes it.
 [vars]
-R2_ACCOUNT_ID = ""
 R2_BUCKET = "latentsync-stag"
-RUNPOD_ENDPOINT_ID = ""
-PUBLIC_BASE_URL = "http://localhost:8787"
 
 # R2 bucket binding (server-side reads/listing; presigning uses S3 creds via aws4fetch)
 [[r2_buckets]]
