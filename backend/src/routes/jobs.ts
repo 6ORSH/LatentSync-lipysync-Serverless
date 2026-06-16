@@ -45,8 +45,14 @@ jobs.post("/", async (c) => {
     ],
   };
 
+  // Derive the callback base from the incoming request origin so the webhook
+  // always points at wherever this Worker is actually reachable — robust to a
+  // missing/misconfigured PUBLIC_BASE_URL. PUBLIC_BASE_URL overrides only when
+  // explicitly set to an https URL (e.g. a custom domain).
+  const override = c.env.PUBLIC_BASE_URL;
+  const base = override && override.startsWith("https://") ? override : new URL(c.req.url).origin;
   const webhookUrl =
-    `${c.env.PUBLIC_BASE_URL}/webhooks/runpod` +
+    `${base}/webhooks/runpod` +
     `?secret=${encodeURIComponent(c.env.WEBHOOK_SECRET)}&job=${jobId}`;
 
   const rp = await submitJob(c.env, input, webhookUrl);
