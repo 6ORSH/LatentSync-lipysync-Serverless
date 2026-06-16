@@ -1,0 +1,25 @@
+name = "latentsync-backend"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+# Non-secret config. Secrets (R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+# RUNPOD_API_KEY, JWT_SECRET, WEBHOOK_SECRET) come from .dev.vars locally
+# and `wrangler secret put` in production.
+[vars]
+R2_ACCOUNT_ID = ""
+R2_BUCKET = "latentsync-stag"
+RUNPOD_ENDPOINT_ID = ""
+PUBLIC_BASE_URL = "http://localhost:8787"
+
+# R2 bucket binding (server-side reads/listing; presigning uses S3 creds via aws4fetch)
+[[r2_buckets]]
+binding = "BUCKET"
+bucket_name = "latentsync-stag"
+
+# Hyperdrive -> Postgres. Provision with:
+#   wrangler hyperdrive create latentsync-db --connection-string="postgres://..."
+# then paste the id below and uncomment.
+# [[hyperdrive]]
+# binding = "HYPERDRIVE"
+# id = "<hyperdrive-id>"

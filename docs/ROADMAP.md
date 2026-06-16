@@ -9,8 +9,9 @@ Living document. We check progress against this. Tick items as they land.
 - **Job completion:** RunPod **webhooks** call our backend — no polling worker.
 - **Storage:** Cloudflare R2 (S3-compatible, $0 egress, global). Single bucket,
   prefix-per-user, lifecycle rules for retention.
-- **Backend:** FastAPI (Python — matches existing code, boto3, ffmpeg utils).
-- **Database:** Postgres (users, jobs, balances).
+- **Backend:** Cloudflare Worker (TypeScript + Hono) — "all on Cloudflare".
+  Thin orchestration layer; RunPod does the heavy GPU work. Lives in `backend/`.
+- **Database:** Postgres (Neon/PlanetScale) via **Hyperdrive** binding + Drizzle ORM.
 - **Payments:** crypto first (global audience), cards (non-RU) later.
 - **Clients:** web cabinet, then Telegram bot — both are just callers of the same backend API.
 - **NOT using:** Celery, Redis-as-broker. (Redis maybe later for rate-limit/idempotency/cache only.)
@@ -44,21 +45,31 @@ Cloudflare side (user, in dashboard) — needed before this can run:
 - [x] Create R2 buckets `latentsync-prod` and `latentsync-stag`
 - [x] Create R2 API token (Account API token, Object Read & Write); note Account ID
 - [x] Set RunPod endpoint env: `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `STAG_R2_BUCKET`, `PROD_R2_BUCKET`
-- [ ] Lifecycle rules: `inputs/` expire 1–3 days, `outputs/` expire 30 days  ← still TODO
+- [x] Lifecycle rules: `inputs/` expire 1–3 days, `outputs/` expire 30 days
 - [x] End-to-end test: stag run COMPLETED 2026-06-15 (image v7), result in R2 + presigned URL
 
 Pipeline fix shipped alongside (v7): trim whisper_chunks to len(faces) so a
 partial last inference window doesn't crash when face detection skips frames.
 
-## Phase 2 — Backend API (the brain)
-- [ ] FastAPI service skeleton + deploy target (Fly.io / Railway / VPS)
-- [ ] Postgres schema: `users`, `jobs` (status, keys, cost, created_at, expires_at)
-- [ ] Auth: register/login, JWT or API keys
-- [ ] `POST /uploads` → presigned PUT URLs for video + audio
-- [ ] `POST /jobs` → validate → call RunPod `/run` with keys + webhook → store job
-- [ ] `POST /runpod/webhook` → mark job COMPLETED/FAILED, store output key
-- [ ] `GET /jobs` → user history; `GET /jobs/{id}/download` → presigned GET
-- [ ] Input validation + limits (duration, file size, format)
+## Phase 2 — Backend API (Cloudflare Worker / TypeScript, in `backend/`)
+Stack: Workers + Hono, R2 presign via aws4fetch, Postgres via Hyperdrive + Drizzle, JWT auth.
+
+- **2a** scaffold ✅
+  - [x] Worker + Hono, `GET /health`
+  - [x] `POST /uploads` → presigned PUT URLs (video + audio) via aws4fetch
+  - [x] Drizzle schema drafted (`users`, `jobs`); typecheck + dry-run build green
+- **2b** database live
+  - [ ] Provision Postgres (Neon/PlanetScale) + `wrangler hyperdrive create`
+  - [ ] `db:generate` + `db:migrate`; wire `getDb()` and uncomment Hyperdrive binding
+- **2c** jobs
+  - [ ] `POST /jobs` → validate → RunPod `/run` (keys + webhook) → store job + runpod_id
+  - [ ] Input validation + limits (duration, file size, format)
+- **2d** webhook
+  - [ ] `POST /webhooks/runpod` → verify secret → mark completed/failed + output key
+- **2e** auth + history
+  - [ ] Register/login, JWT middleware, scope jobs to user
+  - [ ] `GET /jobs` history; `GET /jobs/:id/download` → presigned GET
+- [ ] Deploy worker (`wrangler deploy`) + secrets
 
 ## Phase 3 — User cabinet (web)
 - [ ] Frontend skeleton (framework TBD)

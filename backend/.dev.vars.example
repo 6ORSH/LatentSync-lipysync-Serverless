@@ -1,0 +1,11 @@
+# Copy to .dev.vars (gitignored) for local `wrangler dev`.
+# In production set these with `wrangler secret put <NAME>`.
+R2_ACCOUNT_ID=your_cloudflare_account_id
+R2_ACCESS_KEY_ID=your_r2_access_key
+R2_SECRET_ACCESS_KEY=your_r2_secret_key
+R2_BUCKET=latentsync-stag
+RUNPOD_API_KEY=your_runpod_api_key
+RUNPOD_ENDPOINT_ID=your_runpod_endpoint_id
+JWT_SECRET=dev_change_me
+WEBHOOK_SECRET=dev_change_me
+PUBLIC_BASE_URL=http://localhost:8787

@@ -24,6 +24,9 @@ checkpoints/
 *.wav
 response.json
 
+# Backend (Cloudflare Worker) — separate service, not part of the GPU worker image
+backend/
+
 # Editor / OS
 .idea
 .vscode
