@@ -59,13 +59,14 @@ Stack: Workers + Hono, R2 presign via aws4fetch, Postgres via Hyperdrive + Drizz
   - [x] `POST /uploads` → presigned PUT URLs (video + audio) via aws4fetch
   - [x] Drizzle schema drafted (`users`, `jobs`); typecheck + dry-run build green
 - **2b** database live
-  - [ ] Provision Postgres (Neon/PlanetScale) + `wrangler hyperdrive create`
-  - [ ] `db:generate` + `db:migrate`; wire `getDb()` and uncomment Hyperdrive binding
+  - [x] Provision Neon Postgres + `wrangler hyperdrive create` (id wired in wrangler.toml)
+  - [x] `db:generate` (initial migration committed); `getDb()` wired, Hyperdrive binding live
+  - [ ] `db:migrate` against Neon (creates the tables) — run by user
 - **2c** jobs
-  - [ ] `POST /jobs` → validate → RunPod `/run` (keys + webhook) → store job + runpod_id
-  - [ ] Input validation + limits (duration, file size, format)
+  - [x] `POST /jobs` → RunPod `/run` (keys + webhook) → store job + runpod_id; `GET /jobs/:id`
+  - [ ] Input validation: basic key checks done; size/duration/format limits TODO
 - **2d** webhook
-  - [ ] `POST /webhooks/runpod` → verify secret → mark completed/failed + output key
+  - [x] `POST /webhooks/runpod` → verify secret → mark completed/failed + output key
 - **2e** auth + history
   - [ ] Register/login, JWT middleware, scope jobs to user
   - [ ] `GET /jobs` history; `GET /jobs/:id/download` → presigned GET

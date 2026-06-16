@@ -17,9 +17,9 @@ PUBLIC_BASE_URL = "http://localhost:8787"
 binding = "BUCKET"
 bucket_name = "latentsync-stag"
 
-# Hyperdrive -> Postgres. Provision with:
-#   wrangler hyperdrive create latentsync-db --connection-string="postgres://..."
-# then paste the id below and uncomment.
-# [[hyperdrive]]
-# binding = "HYPERDRIVE"
-# id = "<hyperdrive-id>"
+# Hyperdrive -> Postgres (Neon). For local `wrangler dev`, set the direct Neon
+# connection string in your shell as:
+#   WRANGLER_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE="postgres://...sslmode=require"
+[[hyperdrive]]
+binding = "HYPERDRIVE"
+id = "413667244a1548a79393896f87c961d9"
