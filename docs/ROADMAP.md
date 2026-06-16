@@ -72,7 +72,9 @@ Stack: Workers + Hono, R2 presign via aws4fetch, Postgres via Hyperdrive + Drizz
   - [ ] `GET /jobs` history; `GET /jobs/:id/download` → presigned GET
 - [x] Deploy worker (`wrangler deploy`) + secrets — live at latentsync-backend.foormanw.workers.dev
       (verified: /health, /uploads, R2 presigned PUT 200, Hyperdrive→Neon). Hyperdrive caching disabled.
-- [ ] Live job E2E: POST /jobs with real files → webhook → completed + downloadUrl (user)
+- [x] Live job E2E verified 2026-06-16: upload → /jobs → RunPod → webhook flips job
+      to completed → GET /jobs/:id returns presigned downloadUrl. Webhook URL now
+      derived from request origin (PUBLIC_BASE_URL no longer a footgun).
 
 ## Phase 3 — User cabinet (web)
 - [ ] Frontend skeleton (framework TBD)
