@@ -114,19 +114,22 @@ def generate_lipsync(
     output_path: str,
     temp_dir: str,
     seed: int = 1247,
+    inference_steps: int = 20,
+    guidance_scale: float = 1.5,
 ):
     pipe = load_pipe()
 
     if seed != -1:
         torch.manual_seed(seed)
 
+    # Single source of truth — the dict logged is exactly what runs.
     payload = {
         "video_path": video_path,
         "audio_path": audio_path,
         "video_out_path": output_path,
         "num_frames": CONFIG.data.num_frames,
-        "num_inference_steps": 20,
-        "guidance_scale": 1.5,
+        "num_inference_steps": inference_steps,
+        "guidance_scale": guidance_scale,
         "weight_dtype": DTYPE,
         "width": CONFIG.data.resolution,
         "height": CONFIG.data.resolution,
@@ -137,16 +140,4 @@ def generate_lipsync(
     print("🚀 Pipeline arguments:")
     pprint.pprint(payload)
 
-    pipe(
-        video_path=video_path,
-        audio_path=audio_path,
-        video_out_path=output_path,
-        num_frames=CONFIG.data.num_frames,
-        num_inference_steps=20,
-        guidance_scale=1.5,
-        weight_dtype=DTYPE,
-        width=CONFIG.data.resolution,
-        height=CONFIG.data.resolution,
-        mask_image_path=CONFIG.data.mask_image_path,
-        temp_dir=temp_dir,
-    )
+    pipe(**payload)

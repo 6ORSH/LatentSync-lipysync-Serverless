@@ -64,6 +64,10 @@ def handler(event):
         level = payload.get("level")
         user_id = payload.get("user_id", "anon")
 
+        # Optional per-job quality/speed knobs (fall back to model defaults).
+        inference_steps = int(payload.get("inference_steps", 20))
+        guidance_scale = float(payload.get("guidance_scale", 1.5))
+
         results = []
 
         # ---- Environment selection ----
@@ -159,6 +163,8 @@ def handler(event):
                     output_path=str(lipsync_out),
                     temp_dir=str(temp_dir),
                     seed=SEED,
+                    inference_steps=inference_steps,
+                    guidance_scale=guidance_scale,
                 )
 
                 # ---- Caption burn (GPU, optional) ----

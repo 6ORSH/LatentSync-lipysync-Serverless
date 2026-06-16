@@ -14,6 +14,8 @@ interface CreateJobBody {
   videoKey?: string;
   audioKey?: string;
   cc?: boolean;
+  inferenceSteps?: number; // quality/speed; omitted -> worker default (20)
+  guidanceScale?: number; // lip-sync strength; omitted -> worker default (1.5)
 }
 
 // POST /jobs — submit a lip-sync job.
@@ -33,7 +35,7 @@ jobs.post("/", async (c) => {
   const jobId = body.jobId ?? crypto.randomUUID();
 
   // Matches app.py contract. level "stag" -> STAG_R2_BUCKET on the worker.
-  const input = {
+  const input: Record<string, unknown> = {
     user_id: "anon",
     level: "stag",
     inp_meta: [
@@ -44,6 +46,20 @@ jobs.post("/", async (c) => {
       },
     ],
   };
+
+  // Optional quality/speed knobs (omitted -> worker defaults 20 / 1.5).
+  if (body.inferenceSteps !== undefined) {
+    if (!Number.isInteger(body.inferenceSteps) || body.inferenceSteps < 1 || body.inferenceSteps > 50) {
+      return c.json({ error: "inferenceSteps must be an integer between 1 and 50" }, 400);
+    }
+    input.inference_steps = body.inferenceSteps;
+  }
+  if (body.guidanceScale !== undefined) {
+    if (typeof body.guidanceScale !== "number" || body.guidanceScale < 1 || body.guidanceScale > 5) {
+      return c.json({ error: "guidanceScale must be a number between 1.0 and 5.0" }, 400);
+    }
+    input.guidance_scale = body.guidanceScale;
+  }
 
   // Derive the callback base from the incoming request origin so the webhook
   // always points at wherever this Worker is actually reachable — robust to a
