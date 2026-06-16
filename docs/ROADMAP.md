@@ -61,7 +61,7 @@ Stack: Workers + Hono, R2 presign via aws4fetch, Postgres via Hyperdrive + Drizz
 - **2b** database live
   - [x] Provision Neon Postgres + `wrangler hyperdrive create` (id wired in wrangler.toml)
   - [x] `db:generate` (initial migration committed); `getDb()` wired, Hyperdrive binding live
-  - [ ] `db:migrate` against Neon (creates the tables) — run by user
+  - [x] `db:migrate` against Neon — verified: `GET /jobs/:id` returns 404 (table exists, Hyperdrive→Neon ok)
 - **2c** jobs
   - [x] `POST /jobs` → RunPod `/run` (keys + webhook) → store job + runpod_id; `GET /jobs/:id`
   - [ ] Input validation: basic key checks done; size/duration/format limits TODO
@@ -70,7 +70,9 @@ Stack: Workers + Hono, R2 presign via aws4fetch, Postgres via Hyperdrive + Drizz
 - **2e** auth + history
   - [ ] Register/login, JWT middleware, scope jobs to user
   - [ ] `GET /jobs` history; `GET /jobs/:id/download` → presigned GET
-- [ ] Deploy worker (`wrangler deploy`) + secrets
+- [x] Deploy worker (`wrangler deploy`) + secrets — live at latentsync-backend.foormanw.workers.dev
+      (verified: /health, /uploads, R2 presigned PUT 200, Hyperdrive→Neon). Hyperdrive caching disabled.
+- [ ] Live job E2E: POST /jobs with real files → webhook → completed + downloadUrl (user)
 
 ## Phase 3 — User cabinet (web)
 - [ ] Frontend skeleton (framework TBD)
