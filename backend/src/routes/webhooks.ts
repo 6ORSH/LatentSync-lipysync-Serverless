@@ -10,6 +10,8 @@ export const webhooks = new Hono<{ Bindings: Env }>();
 // `output` is whatever app.py returned.
 interface RunpodWebhookBody {
   status?: string; // COMPLETED | FAILED | ...
+  delayTime?: number; // ms spent queued before the GPU picked it up
+  executionTime?: number; // ms of GPU compute
   output?: {
     status?: string; // "success" from app.py
     error?: string;
@@ -32,17 +34,24 @@ webhooks.post("/runpod", async (c) => {
 
   const db = getDb(c.env);
 
+  // Timing reported by RunPod (present on both success and failure).
+  const timing = {
+    completedAt: new Date(),
+    runpodDelayMs: body.delayTime ?? null,
+    runpodExecutionMs: body.executionTime ?? null,
+  };
+
   if (body.status === "COMPLETED" && body.output?.status === "success") {
     const outputKey = body.output.results?.[0]?.outputs?.[0]?.output_video ?? null;
     await db
       .update(jobsTable)
-      .set({ status: "completed", outputKey })
+      .set({ status: "completed", outputKey, ...timing })
       .where(eq(jobsTable.id, jobId));
   } else {
     const error = body.output?.error ?? `runpod status ${body.status ?? "unknown"}`;
     await db
       .update(jobsTable)
-      .set({ status: "failed", error })
+      .set({ status: "failed", error, ...timing })
       .where(eq(jobsTable.id, jobId));
   }
 

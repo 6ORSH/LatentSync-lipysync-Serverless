@@ -24,6 +24,9 @@ export const jobs = pgTable(
     cost: integer("cost").notNull().default(0),
     error: text("error"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+    runpodDelayMs: integer("runpod_delay_ms"), // queue wait reported by RunPod
+    runpodExecutionMs: integer("runpod_execution_ms"), // GPU compute reported by RunPod
     expiresAt: timestamp("expires_at", { withTimezone: true }),
   },
   (t) => ({

@@ -85,12 +85,23 @@ jobs.get("/:id", async (c) => {
     downloadUrl = await presignGet(c.env, job.outputKey);
   }
 
+  // End-to-end wall time from submit (createdAt) to webhook receipt (completedAt).
+  const totalSeconds = job.completedAt
+    ? (job.completedAt.getTime() - job.createdAt.getTime()) / 1000
+    : null;
+
   return c.json({
     jobId: job.id,
     status: job.status,
     error: job.error,
     downloadUrl,
     createdAt: job.createdAt,
+    completedAt: job.completedAt,
+    timing: {
+      totalSeconds,
+      runpodDelayMs: job.runpodDelayMs,
+      runpodExecutionMs: job.runpodExecutionMs,
+    },
     expiresAt: job.expiresAt,
   });
 });
