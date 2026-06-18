@@ -1,0 +1,147 @@
+import runpod
+import os
+import uuid
+import base64
+import glob
+import shutil
+import logging
+import subprocess
+from pathlib import Path
+
+from serverless_r2 import (
+    download_key,
+    download_url,
+    upload_key,
+    presigned_get,
+    set_bucket_for_level,
+)
+
+logging.basicConfig(level=logging.INFO)
+
+# --- KeySync inference invariants (run from the repo root, /app) ---
+REPO = "/app"
+KEYFRAMES_CKPT = "pretrained_models/checkpoints/keyframe_dub.pt"
+INTERPOLATION_CKPT = "pretrained_models/checkpoints/interpolation_dub.pt"
+MODEL_CONFIG = "scripts/sampling/configs/interpolation.yaml"
+MODEL_KEYFRAMES_CONFIG = "scripts/sampling/configs/keyframe.yaml"
+
+
+def _run(cmd, **kw):
+    logging.info("$ %s", " ".join(cmd))
+    subprocess.run(cmd, check=True, **kw)
+
+
+def _standardize_video(src: str, dst: str):
+    # KeySync reads raw frames and resizes to 512x512 internally; just normalise fps.
+    _run(["ffmpeg", "-y", "-nostdin", "-i", src, "-r", "25", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", dst])
+
+
+def _standardize_audio(src: str, dst: str):
+    _run(["ffmpeg", "-y", "-nostdin", "-i", src, "-ar", "16000", "-ac", "1", dst])
+
+
+def handler(event):
+    workdir = None
+    try:
+        payload = event["input"]
+        level = payload.get("level", "stag")
+        user_id = payload.get("user_id", "anon")
+        # Backend sends flat keys for keysync (see backend/src/routes/jobs.ts).
+        video_in = payload["video_key"]
+        audio_in = payload["audio_key"]
+
+        if level not in ("local", "test"):
+            set_bucket_for_level(level)
+
+        job_id = str(uuid.uuid4())
+        workdir = Path("/tmp") / job_id
+        (workdir / "out").mkdir(parents=True, exist_ok=True)
+
+        raw_video = str(workdir / "raw_video.mp4")
+        raw_audio = str(workdir / "raw_audio.wav")
+        video_25 = str(workdir / "video.mp4")
+        audio_16 = str(workdir / "audio.wav")
+        out_dir = str(workdir / "out")
+
+        # ---- Fetch inputs ----
+        if level == "local":
+            raw_video, raw_audio = video_in, audio_in
+        elif level == "test":
+            logging.info("⬇️ Downloading inputs (test URLs)")
+            download_url(video_in, raw_video)
+            download_url(audio_in, raw_audio)
+        else:
+            logging.info("⬇️ Downloading inputs (R2)")
+            download_key(video_in, raw_video)
+            download_key(audio_in, raw_audio)
+
+        # ---- Normalise (25 fps / 16 kHz mono) ----
+        _standardize_video(raw_video, video_25)
+        _standardize_audio(raw_audio, audio_16)
+
+        # ---- Run KeySync dubbing pipeline ----
+        logging.info("🎬 Running KeySync dubbing pipeline")
+        _run(
+            [
+                "python", "scripts/sampling/dubbing_pipeline_raw.py",
+                f"--filelist={video_25}",
+                f"--filelist_audio={audio_16}",
+                f"--output_folder={out_dir}",
+                f"--keyframes_ckpt={KEYFRAMES_CKPT}",
+                f"--interpolation_ckpt={INTERPOLATION_CKPT}",
+                f"--model_config={MODEL_CONFIG}",
+                f"--model_keyframes_config={MODEL_KEYFRAMES_CONFIG}",
+                "--audio_emb_type=hubert",
+                "--recompute=True",
+                "--add_zero_flag=True",
+                "--chunk_size=2",
+                "--decoding_t=1",
+                "--fix_occlusion=False",
+            ],
+            cwd=REPO,
+        )
+
+        # ---- Locate output mp4 ----
+        produced = sorted(glob.glob(os.path.join(out_dir, "*.mp4")), key=os.path.getmtime)
+        if not produced:
+            raise RuntimeError(f"KeySync produced no output video in {out_dir}")
+        result = produced[-1]
+
+        # ---- Deliver ----
+        output_encoding = None
+        output_url = None
+        if level == "local":
+            output_video = result
+        elif level == "test":
+            with open(result, "rb") as f:
+                output_video = base64.b64encode(f.read()).decode("utf-8")
+            output_encoding = "base64"
+        else:
+            out_key = f"outputs/{user_id}/{job_id}/result.mp4"
+            output_video = upload_key(result, out_key)
+            output_url = presigned_get(out_key)
+
+        return {
+            "status": "success",
+            "model": "keysync",
+            "results": [
+                {
+                    "output_video": output_video,
+                    "output_url": output_url,
+                    "output_encoding": output_encoding,
+                }
+            ],
+        }
+
+    except subprocess.CalledProcessError as e:
+        logging.exception("❌ KeySync subprocess failed")
+        return {"error": f"keysync pipeline failed (exit {e.returncode})"}
+    except Exception as e:
+        logging.exception("❌ KeySync job failed")
+        return {"error": str(e)}
+    finally:
+        if workdir and workdir.exists():
+            shutil.rmtree(workdir, ignore_errors=True)
+
+
+runpod.serverless.start({"handler": handler})

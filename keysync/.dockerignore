@@ -1,0 +1,10 @@
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
+notebooks
+assets
+evaluation
+*.md
+# Weights are baked from HF in the Dockerfile, never from local context.
+pretrained_models
