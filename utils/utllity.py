@@ -30,6 +30,9 @@ def load_environment(env_key: str = "stag"):
 def get_audio_duration(audio_path):
     """
     Returns audio duration in seconds.
+
+    Raises a clear RuntimeError if ffprobe fails or returns no duration,
+    instead of a cryptic KeyError / JSONDecodeError on a broken input.
     """
     cmd = [
         "ffprobe",
@@ -46,4 +49,15 @@ def get_audio_duration(audio_path):
         text=True
     )
 
-    return float(json.loads(result.stdout)["format"]["duration"])
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"ffprobe не смог прочитать аудио '{audio_path}': {result.stderr.strip()}"
+        )
+
+    try:
+        return float(json.loads(result.stdout)["format"]["duration"])
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
+        raise RuntimeError(
+            f"ffprobe не смог прочитать аудио '{audio_path}': "
+            f"{result.stderr.strip() or e}"
+        )

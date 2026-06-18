@@ -103,3 +103,4 @@ Stack: Workers + Hono, R2 presign via aws4fetch, Postgres via Hyperdrive + Drizz
 - [ ] Cost tracking / reconciliation
 - [ ] Abuse prevention (quotas, content limits)
 - [ ] Backups for Postgres
+- [ ] Update GPU worker base image — `nvidia/cuda:12.1.0-runtime-ubuntu22.04` is deprecated upstream (still works; not a blocker). Bumping CUDA may also unlock newer GPUs (e.g. Blackwell sm_120) if torch is upgraded in step.

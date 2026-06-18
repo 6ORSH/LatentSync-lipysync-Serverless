@@ -32,6 +32,20 @@ jobs.post("/", async (c) => {
     return c.json({ error: "keys must be under inputs/" }, 400);
   }
 
+  // Pre-flight: both inputs must already exist in R2. Catches the common
+  // "submitted before the upload finished" case instantly — a clear 400 instead
+  // of spinning up a GPU worker that fails on a missing object.
+  const [videoObj, audioObj] = await Promise.all([
+    c.env.BUCKET.head(body.videoKey),
+    c.env.BUCKET.head(body.audioKey),
+  ]);
+  const missing = [videoObj ? null : body.videoKey, audioObj ? null : body.audioKey].filter(
+    (k): k is string => k !== null,
+  );
+  if (missing.length > 0) {
+    return c.json({ error: "input not uploaded", missing }, 400);
+  }
+
   const jobId = body.jobId ?? crypto.randomUUID();
 
   // Matches app.py contract. level "stag" -> STAG_R2_BUCKET on the worker.
