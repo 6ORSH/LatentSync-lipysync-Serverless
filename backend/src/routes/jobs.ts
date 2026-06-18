@@ -31,6 +31,25 @@ jobs.post("/", async (c) => {
   if (!body.videoKey.startsWith("inputs/") || !body.audioKey.startsWith("inputs/")) {
     return c.json({ error: "keys must be under inputs/" }, 400);
   }
+  // ffmpeg/ffprobe on the worker choke on non-ASCII paths (e.g. Cyrillic), so
+  // reject anything outside a safe ASCII set up front with a clear message.
+  // Allowed: letters, digits, and / . _ -
+  const SAFE_KEY = /^[A-Za-z0-9/._-]+$/;
+  const badKeys = [
+    SAFE_KEY.test(body.videoKey) ? null : body.videoKey,
+    SAFE_KEY.test(body.audioKey) ? null : body.audioKey,
+  ].filter((k): k is string => k !== null);
+  if (badKeys.length > 0) {
+    return c.json(
+      {
+        error:
+          "filename contains unsupported characters — use ASCII only " +
+          "(letters, digits, / . _ -); e.g. Cyrillic is not allowed",
+        invalid: badKeys,
+      },
+      400,
+    );
+  }
 
   // Pre-flight: both inputs must already exist in R2 and be non-empty. Catches
   // "submitted before the upload finished" and broken/empty uploads instantly —
