@@ -27,9 +27,9 @@ def load_environment(env_key: str = "stag"):
     return env_key
 
 
-def get_audio_duration(audio_path, padding_seconds=1.0):
+def get_audio_duration(audio_path):
     """
-    Returns audio duration in seconds + padding
+    Returns audio duration in seconds.
     """
     cmd = [
         "ffprobe",
@@ -46,5 +46,4 @@ def get_audio_duration(audio_path, padding_seconds=1.0):
         text=True
     )
 
-    duration = float(json.loads(result.stdout)["format"]["duration"])
-    return duration + padding_seconds
+    return float(json.loads(result.stdout)["format"]["duration"])

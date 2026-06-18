@@ -5,8 +5,11 @@ from utils.ultralight_facedetector import UltraLightFaceDetecion
 
 class RandomizedVideoSampler:
     """
-    Randomized forward/backward video frame sampler
-    (extracted from Wav2Lip-style datagen logic)
+    Builds a driving clip of a target length from a source video.
+
+    Forward playback from a random start when the source is long enough (no
+    seam, each run differs); when it is too short, the source is extended by
+    a seamless boomerang (reverse from the end), avoiding any hard cuts.
     """
 
     def __init__(
@@ -84,18 +87,33 @@ class RandomizedVideoSampler:
     # -------------------------
     def randomized_frame_generator(self, frames, num_frames):
         """
-        Yield frames forward from a random start, wrapping around with modulo
-        when more frames are needed than the source has.
+        Produce `num_frames` frames with no hard seams.
 
-        Forward-only: no back-and-forth, so no visible wobble. The random start
-        keeps each generated clip different. When the source is shorter than the
-        requested length there is at most one seam per wrap-around (a single
-        frame jump), which is far less noticeable than oscillating playback.
+        - Source long enough (n >= num_frames): a single forward window from a
+          random start. The window fits entirely, so there is no wrap and no
+          seam, while the random start keeps each clip different.
+        - Source too short (n < num_frames): extend by reversing from the END
+          (boomerang) — forward 0..n-1, then back n-2..1, then forward again,
+          repeating. Direction only flips at the endpoints where frames are
+          adjacent, so playback stays smooth; no mid/start seams.
         """
         n = len(frames)
-        start = np.random.randint(0, n)
+
+        if n >= num_frames:
+            start = np.random.randint(0, n - num_frames + 1)
+            for k in range(num_frames):
+                yield frames[start + k]
+            return
+
+        if n == 1:
+            for _ in range(num_frames):
+                yield frames[0]
+            return
+
+        # Seamless ping-pong cycle: 0,1,..,n-1,n-2,..,1  (length 2n-2)
+        cycle = list(range(n)) + list(range(n - 2, 0, -1))
         for k in range(num_frames):
-            yield frames[(start + k) % n]
+            yield frames[cycle[k % len(cycle)]]
 
     # -------------------------
     # High-level API
