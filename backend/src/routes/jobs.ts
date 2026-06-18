@@ -32,16 +32,18 @@ jobs.post("/", async (c) => {
     return c.json({ error: "keys must be under inputs/" }, 400);
   }
 
-  // Pre-flight: both inputs must already exist in R2. Catches the common
-  // "submitted before the upload finished" case instantly — a clear 400 instead
-  // of spinning up a GPU worker that fails on a missing object.
+  // Pre-flight: both inputs must already exist in R2 and be non-empty. Catches
+  // "submitted before the upload finished" and broken/empty uploads instantly —
+  // a clear 400 instead of spinning up a GPU worker that fails on the object.
+  // (Full decodability can only be checked on the worker, which has ffprobe.)
   const [videoObj, audioObj] = await Promise.all([
     c.env.BUCKET.head(body.videoKey),
     c.env.BUCKET.head(body.audioKey),
   ]);
-  const missing = [videoObj ? null : body.videoKey, audioObj ? null : body.audioKey].filter(
-    (k): k is string => k !== null,
-  );
+  const missing = [
+    videoObj && videoObj.size > 0 ? null : body.videoKey,
+    audioObj && audioObj.size > 0 ? null : body.audioKey,
+  ].filter((k): k is string => k !== null);
   if (missing.length > 0) {
     return c.json({ error: "input not uploaded", missing }, 400);
   }

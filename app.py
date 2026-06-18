@@ -9,7 +9,7 @@ from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
 
 from utils.s3 import download_key, download_url, upload_key, presigned_get
-from utils.utllity import load_environment, get_audio_duration
+from utils.utllity import load_environment, get_audio_duration, get_video_duration
 from utils.video import load_pipe, generate_lipsync
 from utils.caption_burn import burn_captions_with_audio_gpu
 from utils.randomizer import RandomizedVideoSampler
@@ -107,6 +107,9 @@ def handler(event):
             else:
                 logging.info("⬇️ Downloading reference video (R2)")
                 download_key(ref_video_path, str(local_ref_video))
+
+            # Fail fast on a missing/unreadable video — before randomizer & GPU.
+            get_video_duration(str(local_ref_video))
 
             # =============================
             # Loop over audios

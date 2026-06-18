@@ -27,19 +27,20 @@ def load_environment(env_key: str = "stag"):
     return env_key
 
 
-def get_audio_duration(audio_path):
+def _probe_duration(media_path, kind):
     """
-    Returns audio duration in seconds.
+    Return media duration in seconds via ffprobe.
 
     Raises a clear RuntimeError if ffprobe fails or returns no duration,
     instead of a cryptic KeyError / JSONDecodeError on a broken input.
+    `kind` is "audio" / "video" — used only for the error message.
     """
     cmd = [
         "ffprobe",
         "-v", "error",
         "-show_entries", "format=duration",
         "-of", "json",
-        audio_path
+        media_path
     ]
 
     result = subprocess.run(
@@ -51,13 +52,23 @@ def get_audio_duration(audio_path):
 
     if result.returncode != 0:
         raise RuntimeError(
-            f"ffprobe не смог прочитать аудио '{audio_path}': {result.stderr.strip()}"
+            f"ffprobe could not read {kind} '{media_path}': {result.stderr.strip()}"
         )
 
     try:
         return float(json.loads(result.stdout)["format"]["duration"])
     except (json.JSONDecodeError, KeyError, ValueError, TypeError) as e:
         raise RuntimeError(
-            f"ffprobe не смог прочитать аудио '{audio_path}': "
+            f"ffprobe could not read {kind} '{media_path}': "
             f"{result.stderr.strip() or e}"
         )
+
+
+def get_audio_duration(audio_path):
+    """Audio duration in seconds (raises RuntimeError if unreadable)."""
+    return _probe_duration(audio_path, "audio")
+
+
+def get_video_duration(video_path):
+    """Video duration in seconds (raises RuntimeError if unreadable)."""
+    return _probe_duration(video_path, "video")
