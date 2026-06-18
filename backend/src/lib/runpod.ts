@@ -15,8 +15,9 @@ export async function submitJob(
   env: Env,
   input: unknown,
   webhookUrl: string,
+  endpointId: string,
 ): Promise<RunPodSubmitResult> {
-  const res = await fetch(`https://api.runpod.ai/v2/${env.RUNPOD_ENDPOINT_ID}/run`, {
+  const res = await fetch(`https://api.runpod.ai/v2/${endpointId}/run`, {
     method: "POST",
     headers: {
       Authorization: `Bearer ${env.RUNPOD_API_KEY}`,

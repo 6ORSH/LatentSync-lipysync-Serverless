@@ -8,7 +8,8 @@ export interface Env {
 
   // --- RunPod ---
   RUNPOD_API_KEY: string; // secret
-  RUNPOD_ENDPOINT_ID: string;
+  RUNPOD_ENDPOINT_ID: string; // LatentSync endpoint
+  RUNPOD_KEYSYNC_ENDPOINT_ID: string; // KeySync endpoint (set when that model is deployed)
 
   // --- Auth / webhooks ---
   JWT_SECRET: string; // secret

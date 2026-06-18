@@ -6,16 +6,18 @@ import { jobs as jobsTable, users } from "../db/schema";
 import { submitJob } from "../lib/runpod";
 import { presignGet } from "../lib/r2";
 import { ANON_USER_ID, RETENTION_MS } from "../lib/constants";
+import { MODELS, isModelId } from "../lib/models";
 
 export const jobs = new Hono<{ Bindings: Env }>();
 
 interface CreateJobBody {
   jobId?: string;
+  model?: string; // "latentsync" (default) | "keysync" — picks endpoint + price
   videoKey?: string;
   audioKey?: string;
   cc?: boolean;
-  inferenceSteps?: number; // quality/speed; omitted -> worker default (20)
-  guidanceScale?: number; // lip-sync strength; omitted -> worker default (1.5)
+  inferenceSteps?: number; // LatentSync only; omitted -> worker default (20)
+  guidanceScale?: number; // LatentSync only; omitted -> worker default (1.5)
 }
 
 // POST /jobs — submit a lip-sync job.
@@ -67,33 +69,59 @@ jobs.post("/", async (c) => {
     return c.json({ error: "input not uploaded", missing }, 400);
   }
 
+  // ---- Model selection (drives endpoint + price) ----
+  const model = body.model ?? "latentsync";
+  if (!isModelId(model)) {
+    return c.json({ error: `unknown model '${body.model}' (use: latentsync, keysync)` }, 400);
+  }
+  const spec = MODELS[model];
+  const endpointId = spec.endpointId(c.env);
+  if (!endpointId) {
+    return c.json({ error: `model '${model}' is not available on this deployment` }, 503);
+  }
+
   const jobId = body.jobId ?? crypto.randomUUID();
 
-  // Matches app.py contract. level "stag" -> STAG_R2_BUCKET on the worker.
-  const input: Record<string, unknown> = {
-    user_id: "anon",
-    level: "stag",
-    inp_meta: [
-      {
-        ref_video_path: body.videoKey,
-        ref_audio_meta: [{ audio_path: body.audioKey }],
-        cc: Boolean(body.cc),
-      },
-    ],
-  };
+  // Per-model input contract. Both go to level "stag" -> STAG_R2_BUCKET; inputs
+  // are R2 keys. LatentSync uses the inp_meta[] shape (app.py); KeySync uses a
+  // flat shape its own handler reads.
+  let input: Record<string, unknown>;
+  if (model === "keysync") {
+    input = {
+      user_id: "anon",
+      level: "stag",
+      model,
+      video_key: body.videoKey,
+      audio_key: body.audioKey,
+      cc: Boolean(body.cc),
+    };
+  } else {
+    input = {
+      user_id: "anon",
+      level: "stag",
+      model,
+      inp_meta: [
+        {
+          ref_video_path: body.videoKey,
+          ref_audio_meta: [{ audio_path: body.audioKey }],
+          cc: Boolean(body.cc),
+        },
+      ],
+    };
 
-  // Optional quality/speed knobs (omitted -> worker defaults 20 / 1.5).
-  if (body.inferenceSteps !== undefined) {
-    if (!Number.isInteger(body.inferenceSteps) || body.inferenceSteps < 1 || body.inferenceSteps > 50) {
-      return c.json({ error: "inferenceSteps must be an integer between 1 and 50" }, 400);
+    // LatentSync-only quality/speed knobs (omitted -> worker defaults 20 / 1.5).
+    if (body.inferenceSteps !== undefined) {
+      if (!Number.isInteger(body.inferenceSteps) || body.inferenceSteps < 1 || body.inferenceSteps > 50) {
+        return c.json({ error: "inferenceSteps must be an integer between 1 and 50" }, 400);
+      }
+      input.inference_steps = body.inferenceSteps;
     }
-    input.inference_steps = body.inferenceSteps;
-  }
-  if (body.guidanceScale !== undefined) {
-    if (typeof body.guidanceScale !== "number" || body.guidanceScale < 1 || body.guidanceScale > 5) {
-      return c.json({ error: "guidanceScale must be a number between 1.0 and 5.0" }, 400);
+    if (body.guidanceScale !== undefined) {
+      if (typeof body.guidanceScale !== "number" || body.guidanceScale < 1 || body.guidanceScale > 5) {
+        return c.json({ error: "guidanceScale must be a number between 1.0 and 5.0" }, 400);
+      }
+      input.guidance_scale = body.guidanceScale;
     }
-    input.guidance_scale = body.guidanceScale;
   }
 
   // Derive the callback base from the incoming request origin so the webhook
@@ -106,7 +134,7 @@ jobs.post("/", async (c) => {
     `${base}/webhooks/runpod` +
     `?secret=${encodeURIComponent(c.env.WEBHOOK_SECRET)}&job=${jobId}`;
 
-  const rp = await submitJob(c.env, input, webhookUrl);
+  const rp = await submitJob(c.env, input, webhookUrl, endpointId);
 
   const db = getDb(c.env);
   await db.insert(users).values({ id: userId }).onConflictDoNothing();
@@ -117,10 +145,11 @@ jobs.post("/", async (c) => {
     inputVideoKey: body.videoKey,
     inputAudioKey: body.audioKey,
     runpodId: rp.id,
+    cost: spec.cost,
     expiresAt: new Date(Date.now() + RETENTION_MS),
   });
 
-  return c.json({ jobId, status: "queued", runpodId: rp.id });
+  return c.json({ jobId, status: "queued", runpodId: rp.id, model, cost: spec.cost });
 });
 
 // GET /jobs/:id — status + (when ready) a presigned download URL.
