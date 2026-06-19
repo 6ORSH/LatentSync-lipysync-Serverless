@@ -40,6 +40,19 @@ def _standardize_audio(src: str, dst: str):
     _run(["ffmpeg", "-y", "-nostdin", "-i", src, "-ar", "16000", "-ac", "1", dst])
 
 
+def _probe(path: str, kind: str):
+    """Fail fast with a clear message if the input isn't a readable media file."""
+    r = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", path],
+        stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+    )
+    if r.returncode != 0 or not r.stdout.strip():
+        raise RuntimeError(
+            f"input {kind} is unreadable or corrupt "
+            f"(re-upload a complete file): {r.stderr.strip() or 'ffprobe failed'}"
+        )
+
+
 def handler(event):
     workdir = None
     try:
@@ -60,6 +73,7 @@ def handler(event):
         raw_video = str(workdir / "raw_video.mp4")
         raw_audio = str(workdir / "raw_audio.wav")
         video_25 = str(workdir / "video.mp4")
+        video_cropped = str(workdir / "video_cropped.mp4")
         audio_16 = str(workdir / "audio.wav")
         out_dir = str(workdir / "out")
 
@@ -75,16 +89,25 @@ def handler(event):
             download_key(video_in, raw_video)
             download_key(audio_in, raw_audio)
 
+        # ---- Validate inputs (clear error instead of a deep ffmpeg failure) ----
+        _probe(raw_video, "video")
+        _probe(raw_audio, "audio")
+
         # ---- Normalise (25 fps / 16 kHz mono) ----
         _standardize_video(raw_video, video_25)
         _standardize_audio(raw_audio, audio_16)
+
+        # ---- Face-crop to a square (KeySync expects a face-centered clip;
+        #      without it the whole frame is squished to 512x512 -> no lip-sync). ----
+        logging.info("✂️ Cropping to face")
+        _run(["python", "preprocess_crop.py", video_25, video_cropped], cwd=REPO)
 
         # ---- Run KeySync dubbing pipeline ----
         logging.info("🎬 Running KeySync dubbing pipeline")
         _run(
             [
                 "python", "scripts/sampling/dubbing_pipeline_raw.py",
-                f"--filelist={video_25}",
+                f"--filelist={video_cropped}",
                 f"--filelist_audio={audio_16}",
                 f"--output_folder={out_dir}",
                 f"--keyframes_ckpt={KEYFRAMES_CKPT}",
