@@ -13,9 +13,14 @@ interface RunpodWebhookBody {
   delayTime?: number; // ms spent queued before the GPU picked it up
   executionTime?: number; // ms of GPU compute
   output?: {
-    status?: string; // "success" from app.py
+    status?: string; // "success" from the worker
     error?: string;
-    results?: Array<{ outputs?: Array<{ output_video?: string }> }>;
+    // LatentSync nests results[].outputs[].output_video; KeySync is flat
+    // (results[].output_video). Support both.
+    results?: Array<{
+      output_video?: string; // KeySync (flat)
+      outputs?: Array<{ output_video?: string }>; // LatentSync (nested)
+    }>;
   };
 }
 
@@ -42,7 +47,8 @@ webhooks.post("/runpod", async (c) => {
   };
 
   if (body.status === "COMPLETED" && body.output?.status === "success") {
-    const outputKey = body.output.results?.[0]?.outputs?.[0]?.output_video ?? null;
+    const r = body.output.results?.[0];
+    const outputKey = r?.outputs?.[0]?.output_video ?? r?.output_video ?? null;
     await db
       .update(jobsTable)
       .set({ status: "completed", outputKey, ...timing })
