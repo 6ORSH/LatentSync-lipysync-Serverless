@@ -43,6 +43,14 @@ from huggingface_hub import hf_hub_download as d;\
 # Bake HuBERT (audio_emb_type=hubert) into the HF cache.
 RUN python -c "from transformers import HubertModel; HubertModel.from_pretrained('facebook/hubert-base-ls960')"
 
+# face_alignment is imported by scripts/util/landmarks_extractor.py but missing
+# from upstream requirements.txt (so --no-deps never installed it). Its deps
+# (numba, scikit-image, scipy, opencv, torch) are already pinned, so --no-deps.
+# Pre-bake the SFD face detector + 2D landmark weights so there's no runtime
+# download (also acts as a numpy-2 compatibility canary at build time).
+RUN pip install --no-deps face-alignment && \
+    python -c "import face_alignment; face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False, device='cpu', face_detector='sfd')"
+
 # Vendor KeySync code + our handler (last, so code edits don't bust the layers above).
 COPY . /app
 
