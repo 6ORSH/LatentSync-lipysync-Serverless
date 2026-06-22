@@ -20,6 +20,8 @@ interface CreateJobBody {
   guidanceScale?: number; // LatentSync only; omitted -> worker default (1.5)
   computeUntil?: number; // KeySync only; seconds to process; omitted -> whole clip
   fixOcclusion?: boolean; // KeySync only; handle hand/object over the face (slower)
+  position?: number[]; // KeySync occlusion: [x,y] point on the occluder, ORIGINAL coords
+  startFrame?: number; // KeySync occlusion: frame index where the occluder is annotated
 }
 
 // POST /jobs — submit a lip-sync job.
@@ -110,6 +112,23 @@ jobs.post("/", async (c) => {
         return c.json({ error: "computeUntil must be an integer between 1 and 600 (seconds)" }, 400);
       }
       input.compute_until = body.computeUntil;
+    }
+    // Occlusion needs a point on the occluder (original coords) — see fixOcclusion.
+    if (body.position !== undefined) {
+      if (
+        !Array.isArray(body.position) ||
+        body.position.length !== 2 ||
+        !body.position.every((n) => typeof n === "number")
+      ) {
+        return c.json({ error: "position must be [x, y] numbers (original-video coords)" }, 400);
+      }
+      input.position = body.position;
+    }
+    if (body.startFrame !== undefined) {
+      if (!Number.isInteger(body.startFrame) || body.startFrame < 0) {
+        return c.json({ error: "startFrame must be a non-negative integer" }, 400);
+      }
+      input.start_frame = body.startFrame;
     }
   } else {
     input = {

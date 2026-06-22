@@ -1,5 +1,6 @@
 import runpod
 import os
+import json
 import uuid
 import base64
 import glob
@@ -76,6 +77,8 @@ def handler(event):
         # Optional per-job knobs (backend validates; defaults match upstream).
         fix_occlusion = bool(payload.get("fix_occlusion", False))
         compute_until = payload.get("compute_until")  # seconds (int) or None -> whole clip
+        position = payload.get("position")  # [x, y] in ORIGINAL coords (occluder point) or None
+        start_frame = int(payload.get("start_frame", 0))  # frame where the occluder is annotated
 
         if level not in ("local", "test"):
             set_bucket_for_level(level)
@@ -127,8 +130,26 @@ def handler(event):
                 )
             raise
 
+        # ---- Occlusion: map the user's occluder point (original coords) into the
+        #      512x512 crop space (sam2 runs on the cropped clip). Occlusion only
+        #      runs when a position is supplied — without it sam2 crashes. ----
+        position_crop = None
+        if fix_occlusion and position is not None:
+            with open(crop_json) as f:
+                crop = json.load(f)
+            sf = max(0, min(start_frame, len(crop) - 1))
+            x0, y0, x1, y1 = crop[sf]
+            bw, bh = max(1, x1 - x0), max(1, y1 - y0)
+            cx = (float(position[0]) - x0) * 512.0 / bw
+            cy = (float(position[1]) - y0) * 512.0 / bh
+            position_crop = [round(cx, 1), round(cy, 1)]
+            logging.info("🩹 Occlusion: orig %s @frame %d -> crop %s", position, sf, position_crop)
+        elif fix_occlusion:
+            logging.warning("fix_occlusion requested without a position — running WITHOUT occlusion")
+        effective_fix = position_crop is not None
+
         # ---- Run KeySync dubbing pipeline ----
-        logging.info("🎬 Running KeySync dubbing pipeline (fix_occlusion=%s)", fix_occlusion)
+        logging.info("🎬 Running KeySync dubbing pipeline (fix_occlusion=%s)", effective_fix)
         cmd = [
             "python", "scripts/sampling/dubbing_pipeline_raw.py",
             f"--filelist={video_cropped}",
@@ -148,10 +169,13 @@ def handler(event):
             "--cond_aug=0.",
             "--resize_size=512",
             "--force_uc_zero_embeddings=[cond_frames,audio_emb]",
-            # Per-job knob: occlusion handling (hand/object over the face). Needs
-            # SAM2 (baked in the image). Off by default (matches upstream).
-            f"--fix_occlusion={fix_occlusion}",
+            # Per-job knob: occlusion handling (hand/object over the face) via SAM2.
+            # Enabled only when an occluder position was supplied + mapped above.
+            f"--fix_occlusion={effective_fix}",
         ]
+        if effective_fix:
+            cmd.append(f"--position=[{position_crop[0]},{position_crop[1]}]")
+            cmd.append(f"--start_frame={start_frame}")
         # Per-job knob: cap processing length (seconds). Omit -> whole clip.
         if compute_until is not None:
             cmd.append(f"--compute_until={compute_until}")
