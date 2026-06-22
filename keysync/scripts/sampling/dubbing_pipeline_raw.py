@@ -883,22 +883,47 @@ def compute_video_embedding(video_frames, vae_model):
 
 @torch.no_grad()
 def extract_video_landmarks(video_frames, landmarks_model):
-    """Extract landmarks from video frames"""
-    print("Extracting landmarks from video frames")
-    landmarks = []
-    batch_size = 10
+    """Extract landmarks from video frames (robust to occasional bad frames).
 
+    Upstream used ensure_landmarks_shape(), which RAISED on any frame without a
+    detected face. Real clips have occasional bad frames (head turn, motion blur,
+    face near the edge), so instead we collect per-frame landmarks and
+    forward/backward-fill gaps with the nearest valid frame. Only raises if NO
+    frame has a face at all.
+    """
+    print("Extracting landmarks from video frames")
+    raw = []
+    batch_size = 10
     for i in tqdm(range(0, len(video_frames), batch_size), desc="Extracting landmarks"):
         batch = video_frames[i : i + batch_size]
-        batch_landmarks = landmarks_model.extract_landmarks(batch)
-        batch_landmarks = ensure_landmarks_shape(batch_landmarks, landmarks)
-        landmarks.extend(batch_landmarks)
-
+        raw.extend(landmarks_model.extract_landmarks(batch))
     torch.cuda.empty_cache()
 
-    print(np.array(landmarks).shape)
+    cleaned = []
+    for lm in raw:
+        if isinstance(lm, list):
+            lm = lm[0] if lm else None
+        cleaned.append(lm if (lm is not None and getattr(lm, "shape", None) == (68, 2)) else None)
 
-    return np.array(landmarks)
+    if all(lm is None for lm in cleaned):
+        raise ValueError("Error: No valid landmarks with shape (68, 2)")
+
+    last = None
+    for i in range(len(cleaned)):
+        if cleaned[i] is None:
+            cleaned[i] = last
+        else:
+            last = cleaned[i]
+    nxt = None
+    for i in range(len(cleaned) - 1, -1, -1):
+        if cleaned[i] is None:
+            cleaned[i] = nxt
+        else:
+            nxt = cleaned[i]
+
+    out = np.array(cleaned)
+    print(out.shape)
+    return out
 
 
 def sample(
