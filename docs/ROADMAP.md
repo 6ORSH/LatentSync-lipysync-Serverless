@@ -104,3 +104,4 @@ Stack: Workers + Hono, R2 presign via aws4fetch, Postgres via Hyperdrive + Drizz
 - [ ] Abuse prevention (quotas, content limits)
 - [ ] Backups for Postgres
 - [ ] Update GPU worker base image — `nvidia/cuda:12.1.0-runtime-ubuntu22.04` is deprecated upstream (still works; not a blocker). Bumping CUDA may also unlock newer GPUs (e.g. Blackwell sm_120) if torch is upgraded in step.
+- [ ] KeySync occlusion v2 — SAM3 (facebookresearch/sam3) as a separate preprocessing node. Mode 1: emit a SAM2 point-prompt → drop-in via the existing `position` field, no worker change. Mode 2: emit a full per-frame occlusion mask (handles moving/transient/multi occluders better than keysync's single-point SAM2) → needs a mask-injection path in the worker (feed as `mask_arms`). v1 stays on keysync's native SAM2 + MediaPipe auto-point.
