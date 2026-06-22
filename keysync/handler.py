@@ -119,6 +119,12 @@ def handler(event):
                 "--add_zero_flag=True",
                 "--chunk_size=2",
                 "--decoding_t=1",
+                # Match upstream infer_raw.sh exactly (these drive classifier-free
+                # guidance / conditioning — omitting them used code defaults and
+                # degraded quality vs the README examples).
+                "--cond_aug=0.",
+                "--resize_size=512",
+                "--force_uc_zero_embeddings=[cond_frames,audio_emb]",
                 "--fix_occlusion=False",
             ],
             cwd=REPO,
