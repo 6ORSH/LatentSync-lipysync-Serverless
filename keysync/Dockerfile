@@ -61,6 +61,10 @@ RUN SAM2_BUILD_CUDA=0 pip install --no-deps "git+https://github.com/facebookrese
 # SAM2 checkpoint (occlusion masks) -> pretrained_models/checkpoints/sam2.1_hiera_large.pt
 RUN python -c "from huggingface_hub import hf_hub_download as d; d('toninio19/keysync', 'checkpoints/sam2.1_hiera_large.pt', local_dir='/app/pretrained_models')"
 
+# MediaPipe Hands for AUTO occlusion (auto_occlusion.py): detect a hand over the
+# face -> position/start_frame for SAM2, no manual click. Verified to keep numpy 2.1.2.
+RUN pip install mediapipe==0.10.35 && python -c "import mediapipe, cv2; print('mediapipe', mediapipe.__version__, 'cv2', cv2.__version__, 'OK')"
+
 # Vendor KeySync code + our handler (last, so code edits don't bust the layers above).
 COPY . /app
 
