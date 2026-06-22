@@ -6,11 +6,14 @@ artifacts. Their intended preprocessing crops a square region around the face
 (scripts/util/gen_landmarks.py -> crop_video.py -> VideoPreProcessor). We do the
 same in-process here, then feed the cropped clip to the pipeline.
 
-Usage:  python preprocess_crop.py <in_video.mp4> <out_video_cropped.mp4>
+Usage:  python preprocess_crop.py <in_video.mp4> <out_video_cropped.mp4> <out_crop_data.json>
+The crop_data JSON (per-frame [x_start, y_start, x_end, y_end]) lets paste_back.py
+composite the generated face back into the original full-resolution frames.
 Run from /app with PYTHONPATH=/app.
 """
 
 import sys
+import json
 import cv2
 import numpy as np
 import torch
@@ -70,7 +73,7 @@ def _extract_landmarks(frames, extractor, batch_size=16):
     return np.stack(cleaned).astype(np.float32)
 
 
-def main(in_path, out_path):
+def main(in_path, out_path, crop_json_path):
     frames, fps = _read_rgb_frames(in_path)
     video = torch.from_numpy(np.array(frames)).permute(0, 3, 1, 2)  # T,C,H,W uint8
 
@@ -78,11 +81,19 @@ def main(in_path, out_path):
     landmarks = _extract_landmarks(frames, extractor)
 
     pre = VideoPreProcessor(crop_scale_factor=2, crop_type="per_frame", resize_size=512)
-    cropped = pre(video, landmarks).video  # T,C,512,512 uint8
+    out = pre(video, landmarks)
+    cropped = out.video  # T,C,512,512 uint8
+
+    # Per-frame square crop boxes — used to paste the generated face back later.
+    crop = [
+        [int(c.x_start), int(c.y_start), int(c.x_end), int(c.y_end)] for c in out.crop_data
+    ]
+    with open(crop_json_path, "w") as f:
+        json.dump(crop, f)
 
     write_video(out_path, rearrange(cropped, "t c h w -> t h w c"), fps=fps, video_codec="libx264")
     print(f"cropped video written: {out_path} ({cropped.shape[0]} frames @ {fps:.2f}fps)")
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2])
+    main(sys.argv[1], sys.argv[2], sys.argv[3])

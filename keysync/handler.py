@@ -77,6 +77,9 @@ def handler(event):
         raw_audio = str(workdir / "raw_audio.wav")
         video_25 = str(workdir / "video.mp4")
         video_cropped = str(workdir / "video_cropped.mp4")
+        crop_json = str(workdir / "crop_data.json")
+        pasted_video = str(workdir / "pasted.mp4")
+        final_out = str(workdir / "final.mp4")
         audio_16 = str(workdir / "audio.wav")
         out_dir = str(workdir / "out")
 
@@ -103,7 +106,7 @@ def handler(event):
         # ---- Face-crop to a square (KeySync expects a face-centered clip;
         #      without it the whole frame is squished to 512x512 -> no lip-sync). ----
         logging.info("✂️ Cropping to face")
-        _run(["python", "preprocess_crop.py", video_25, video_cropped], cwd=REPO)
+        _run(["python", "preprocess_crop.py", video_25, video_cropped, crop_json], cwd=REPO)
 
         # ---- Run KeySync dubbing pipeline ----
         logging.info("🎬 Running KeySync dubbing pipeline (fix_occlusion=%s)", fix_occlusion)
@@ -135,11 +138,22 @@ def handler(event):
             cmd.append(f"--compute_until={compute_until}")
         _run(cmd, cwd=REPO)
 
-        # ---- Locate output mp4 ----
+        # ---- Locate output mp4 (512x512 face crop) ----
         produced = sorted(glob.glob(os.path.join(out_dir, "*.mp4")), key=os.path.getmtime)
         if not produced:
             raise RuntimeError(f"KeySync produced no output video in {out_dir}")
-        result = produced[-1]
+        keysync_out = produced[-1]
+
+        # ---- Paste the generated face back into the original frames (full size) ----
+        logging.info("🖼️ Pasting result back into the original frame")
+        _run(["python", "paste_back.py", video_25, keysync_out, crop_json, pasted_video], cwd=REPO)
+        # Mux the dubbed audio from KeySync's output onto the composited video.
+        _run([
+            "ffmpeg", "-y", "-nostdin", "-i", pasted_video, "-i", keysync_out,
+            "-map", "0:v:0", "-map", "1:a:0?",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", final_out,
+        ])
+        result = final_out
 
         # ---- Deliver ----
         output_encoding = None
