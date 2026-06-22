@@ -31,6 +31,17 @@ def _run(cmd, **kw):
     subprocess.run(cmd, check=True, **kw)
 
 
+def _run_capture(cmd, **kw):
+    """Like _run but captures output; on failure raises RuntimeError with the tail."""
+    logging.info("$ %s", " ".join(cmd))
+    r = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, **kw)
+    if r.stdout:
+        logging.info(r.stdout.strip()[-2000:])
+    if r.returncode != 0:
+        tail = "\n".join((r.stdout or "").strip().splitlines()[-15:])
+        raise RuntimeError(tail or f"command failed (exit {r.returncode})")
+
+
 def _standardize_video(src: str, dst: str):
     # KeySync reads raw frames and resizes to 512x512 internally; just normalise fps.
     _run(["ffmpeg", "-y", "-nostdin", "-i", src, "-r", "25", "-an", "-c:v", "libx264", "-pix_fmt", "yuv420p", dst])
@@ -106,7 +117,15 @@ def handler(event):
         # ---- Face-crop to a square (KeySync expects a face-centered clip;
         #      without it the whole frame is squished to 512x512 -> no lip-sync). ----
         logging.info("✂️ Cropping to face")
-        _run(["python", "preprocess_crop.py", video_25, video_cropped, crop_json], cwd=REPO)
+        try:
+            _run_capture(["python", "preprocess_crop.py", video_25, video_cropped, crop_json], cwd=REPO)
+        except RuntimeError as e:
+            if "no face detected" in str(e):
+                raise RuntimeError(
+                    "no clear face detected — KeySync needs a single, clearly visible, "
+                    "roughly frontal face (multi-person / wide shots are not supported)"
+                )
+            raise
 
         # ---- Run KeySync dubbing pipeline ----
         logging.info("🎬 Running KeySync dubbing pipeline (fix_occlusion=%s)", fix_occlusion)
