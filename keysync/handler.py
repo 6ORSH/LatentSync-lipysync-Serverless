@@ -62,6 +62,9 @@ def handler(event):
         # Backend sends flat keys for keysync (see backend/src/routes/jobs.ts).
         video_in = payload["video_key"]
         audio_in = payload["audio_key"]
+        # Optional per-job knobs (backend validates; defaults match upstream).
+        fix_occlusion = bool(payload.get("fix_occlusion", False))
+        compute_until = payload.get("compute_until")  # seconds (int) or None -> whole clip
 
         if level not in ("local", "test"):
             set_bucket_for_level(level)
@@ -103,32 +106,34 @@ def handler(event):
         _run(["python", "preprocess_crop.py", video_25, video_cropped], cwd=REPO)
 
         # ---- Run KeySync dubbing pipeline ----
-        logging.info("🎬 Running KeySync dubbing pipeline")
-        _run(
-            [
-                "python", "scripts/sampling/dubbing_pipeline_raw.py",
-                f"--filelist={video_cropped}",
-                f"--filelist_audio={audio_16}",
-                f"--output_folder={out_dir}",
-                f"--keyframes_ckpt={KEYFRAMES_CKPT}",
-                f"--interpolation_ckpt={INTERPOLATION_CKPT}",
-                f"--model_config={MODEL_CONFIG}",
-                f"--model_keyframes_config={MODEL_KEYFRAMES_CONFIG}",
-                "--audio_emb_type=hubert",
-                "--recompute=True",
-                "--add_zero_flag=True",
-                "--chunk_size=2",
-                "--decoding_t=1",
-                # Match upstream infer_raw.sh exactly (these drive classifier-free
-                # guidance / conditioning — omitting them used code defaults and
-                # degraded quality vs the README examples).
-                "--cond_aug=0.",
-                "--resize_size=512",
-                "--force_uc_zero_embeddings=[cond_frames,audio_emb]",
-                "--fix_occlusion=False",
-            ],
-            cwd=REPO,
-        )
+        logging.info("🎬 Running KeySync dubbing pipeline (fix_occlusion=%s)", fix_occlusion)
+        cmd = [
+            "python", "scripts/sampling/dubbing_pipeline_raw.py",
+            f"--filelist={video_cropped}",
+            f"--filelist_audio={audio_16}",
+            f"--output_folder={out_dir}",
+            f"--keyframes_ckpt={KEYFRAMES_CKPT}",
+            f"--interpolation_ckpt={INTERPOLATION_CKPT}",
+            f"--model_config={MODEL_CONFIG}",
+            f"--model_keyframes_config={MODEL_KEYFRAMES_CONFIG}",
+            "--audio_emb_type=hubert",
+            "--recompute=True",
+            "--add_zero_flag=True",
+            "--chunk_size=2",
+            "--decoding_t=1",
+            # Match upstream infer_raw.sh exactly (these drive classifier-free
+            # guidance / conditioning — code defaults degraded quality vs README).
+            "--cond_aug=0.",
+            "--resize_size=512",
+            "--force_uc_zero_embeddings=[cond_frames,audio_emb]",
+            # Per-job knob: occlusion handling (hand/object over the face). Needs
+            # SAM2 (baked in the image). Off by default (matches upstream).
+            f"--fix_occlusion={fix_occlusion}",
+        ]
+        # Per-job knob: cap processing length (seconds). Omit -> whole clip.
+        if compute_until is not None:
+            cmd.append(f"--compute_until={compute_until}")
+        _run(cmd, cwd=REPO)
 
         # ---- Locate output mp4 ----
         produced = sorted(glob.glob(os.path.join(out_dir, "*.mp4")), key=os.path.getmtime)

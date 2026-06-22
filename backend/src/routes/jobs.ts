@@ -18,6 +18,8 @@ interface CreateJobBody {
   cc?: boolean;
   inferenceSteps?: number; // LatentSync only; omitted -> worker default (20)
   guidanceScale?: number; // LatentSync only; omitted -> worker default (1.5)
+  computeUntil?: number; // KeySync only; seconds to process; omitted -> whole clip
+  fixOcclusion?: boolean; // KeySync only; handle hand/object over the face (slower)
 }
 
 // POST /jobs — submit a lip-sync job.
@@ -95,6 +97,20 @@ jobs.post("/", async (c) => {
       audio_key: body.audioKey,
       cc: Boolean(body.cc),
     };
+
+    // KeySync-only knobs (omitted -> worker defaults: whole clip, no occlusion).
+    if (body.fixOcclusion !== undefined) {
+      if (typeof body.fixOcclusion !== "boolean") {
+        return c.json({ error: "fixOcclusion must be a boolean" }, 400);
+      }
+      input.fix_occlusion = body.fixOcclusion;
+    }
+    if (body.computeUntil !== undefined) {
+      if (!Number.isInteger(body.computeUntil) || body.computeUntil < 1 || body.computeUntil > 600) {
+        return c.json({ error: "computeUntil must be an integer between 1 and 600 (seconds)" }, 400);
+      }
+      input.compute_until = body.computeUntil;
+    }
   } else {
     input = {
       user_id: "anon",

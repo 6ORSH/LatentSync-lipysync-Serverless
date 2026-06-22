@@ -51,6 +51,16 @@ RUN python -c "from transformers import HubertModel; HubertModel.from_pretrained
 RUN pip install --no-deps face-alignment && \
     python -c "import face_alignment; face_alignment.FaceAlignment(face_alignment.LandmarksType.TWO_D, flip_input=False, device='cpu', face_detector='sfd')"
 
+# SAM2 for occlusion handling (--fix_occlusion: hand/object over the face).
+# Skip the optional CUDA extension — the runtime base has no nvcc; SAM2 falls
+# back to non-accelerated mask post-processing. Deps (hydra-core, iopath,
+# omegaconf, portalocker) are already pinned via requirements.txt.
+RUN SAM2_BUILD_CUDA=0 pip install --no-deps "git+https://github.com/facebookresearch/sam2.git" && \
+    python -c "from sam2.build_sam import build_sam2_video_predictor; print('sam2 import OK')"
+
+# SAM2 checkpoint (occlusion masks) -> pretrained_models/checkpoints/sam2.1_hiera_large.pt
+RUN python -c "from huggingface_hub import hf_hub_download as d; d('toninio19/keysync', 'checkpoints/sam2.1_hiera_large.pt', local_dir='/app/pretrained_models')"
+
 # Vendor KeySync code + our handler (last, so code edits don't bust the layers above).
 COPY . /app
 
