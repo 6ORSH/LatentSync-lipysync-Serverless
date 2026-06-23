@@ -93,6 +93,7 @@ def handler(event):
         video_25 = str(workdir / "video.mp4")
         video_cropped = str(workdir / "video_cropped.mp4")
         crop_json = str(workdir / "crop_data.json")
+        landmarks_npy = str(workdir / "landmarks.npy")
         pasted_video = str(workdir / "pasted.mp4")
         final_out = str(workdir / "final.mp4")
         audio_16 = str(workdir / "audio.wav")
@@ -122,7 +123,7 @@ def handler(event):
         #      without it the whole frame is squished to 512x512 -> no lip-sync). ----
         logging.info("✂️ Cropping to face")
         try:
-            _run_capture(["python", "preprocess_crop.py", video_25, video_cropped, crop_json], cwd=REPO)
+            _run_capture(["python", "preprocess_crop.py", video_25, video_cropped, crop_json, landmarks_npy], cwd=REPO)
         except RuntimeError as e:
             if "no face detected" in str(e):
                 raise RuntimeError(
@@ -206,7 +207,7 @@ def handler(event):
 
         # ---- Paste the generated face back into the original frames (full size) ----
         logging.info("🖼️ Pasting result back into the original frame")
-        _run(["python", "paste_back.py", video_25, keysync_out, crop_json, pasted_video], cwd=REPO)
+        _run(["python", "paste_back.py", video_25, keysync_out, crop_json, pasted_video, landmarks_npy], cwd=REPO)
         # Mux the dubbed audio from KeySync's output onto the composited video.
         _run([
             "ffmpeg", "-y", "-nostdin", "-i", pasted_video, "-i", keysync_out,

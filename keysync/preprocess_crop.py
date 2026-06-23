@@ -73,12 +73,18 @@ def _extract_landmarks(frames, extractor, batch_size=16):
     return np.stack(cleaned).astype(np.float32)
 
 
-def main(in_path, out_path, crop_json_path):
+def main(in_path, out_path, crop_json_path, landmarks_npy_path=None):
     frames, fps = _read_rgb_frames(in_path)
     video = torch.from_numpy(np.array(frames)).permute(0, 3, 1, 2)  # T,C,H,W uint8
 
     extractor = LandmarksExtractor(device="cuda" if torch.cuda.is_available() else "cpu")
-    landmarks = _extract_landmarks(frames, extractor)
+    landmarks = _extract_landmarks(frames, extractor)  # (T,68,2) in ORIGINAL pixel coords
+
+    # Save original-coords landmarks so paste_back can blend only the lower face
+    # (mouth/chin) and keep the original eyes/forehead/background (no VAE flicker,
+    # no square seam).
+    if landmarks_npy_path:
+        np.save(landmarks_npy_path, landmarks)
 
     pre = VideoPreProcessor(crop_scale_factor=2, crop_type="per_frame", resize_size=512)
     out = pre(video, landmarks)
@@ -96,4 +102,4 @@ def main(in_path, out_path, crop_json_path):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1], sys.argv[2], sys.argv[3])
+    main(*sys.argv[1:5])
