@@ -1,6 +1,5 @@
 import runpod
 import os
-import re
 import json
 import uuid
 import base64
@@ -148,22 +147,12 @@ def handler(event):
             position_crop = [round(cx, 1), round(cy, 1)]
             logging.info("🩹 Occlusion (manual): orig %s @frame %d -> crop %s", position, sf, position_crop)
         elif fix_occlusion:
-            # Auto-detect a hand over the face (Step B). auto_occlusion runs on the
-            # cropped clip, so its coords are already in crop space.
-            logging.info("🔎 Auto-detecting occluder (hand over face)")
-            r = subprocess.run(
-                ["python", "auto_occlusion.py", video_cropped],
-                cwd=REPO, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
-            )
-            out = (r.stdout or "").strip()
-            logging.info("auto_occlusion: %s", out.splitlines()[-1] if out else "(no output)")
-            m = re.search(r"OCCLUSION position=\[([-\d.]+),([-\d.]+)\] start_frame=(\d+)", out)
-            if m:
-                position_crop = [float(m.group(1)), float(m.group(2))]
-                start_frame = int(m.group(3))
-                logging.info("🩹 Occlusion (auto): crop %s @frame %d", position_crop, start_frame)
-            else:
-                logging.info("no occluder detected — running WITHOUT occlusion")
+            # Auto-occlusion needs a class-agnostic, semantic detector (SAM3) — skin
+            # heuristics flag beards/brows/open-mouth, and the old MediaPipe path was
+            # hand-only + broken. Until SAM3 (roadmap Phase 6), occlusion requires a
+            # manual `position`. Run WITHOUT occlusion instead of guessing wrong.
+            logging.info("fix_occlusion requested without a position — auto-detect is "
+                         "not available (needs SAM3); running WITHOUT occlusion")
         effective_fix = position_crop is not None
 
         # ---- Run KeySync dubbing pipeline ----
